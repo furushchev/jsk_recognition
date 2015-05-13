@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 
 import cv2
 
@@ -23,6 +24,7 @@ rospy.init_node("image_publisher")
 dynamic_reconfigure.server.Server(ImagePublisherConfig, _cb_dyn_reconfig)
 rate = rospy.Rate(rospy.get_param("rate", 1))
 if_publish_info = rospy.get_param("~publish_info", True)
+pub_times = rospy.get_param("~publish_times", -1)
 pub = rospy.Publisher("~output", Image, queue_size=1)
 if if_publish_info:
     pub_info = rospy.Publisher("~output/camera_info", CameraInfo, queue_size=1)
@@ -51,4 +53,8 @@ while not rospy.is_shutdown():
         rospy.logerr("Did you set properly ~file_name param ?")
         rospy.loginfo(e.message)
     rate.sleep()
-
+    if pub_times > 0:
+        pub_times = pub_times - 1
+    if pub_times == 0:
+        rospy.logwarn("Published one image topic. Exiting...")
+        sys.exit(0)
