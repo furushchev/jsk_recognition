@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="jsk_perception" type="delaunay_image_encoder" name="delaunay_image_encoder"
+        output="screen">
+    <param name="rate" value="1.0" />
+  </node>
+</launch>
