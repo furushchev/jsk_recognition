@@ -405,15 +405,15 @@ endif (PCL_GPU_KINFU_LARGE_SCALE_FOUND)
 jsk_pcl_nodelet(src/pcd_reader_with_pose_nodelet.cpp
   "jsk_pcl/PCDReaderWithPose" "pcd_reader_with_pose")
 # check existence of robot_self_filter package because robot_self_filter is not installed by apt
-pkg_check_modules(robot_self_filter robot_self_filter QUIET)
-if(robot_self_filter_FOUND)
-  jsk_pcl_nodelet(src/collision_detector_nodelet.cpp
-    "jsk_pcl/CollisionDetector" "collision_detector")
-  jsk_pcl_nodelet(src/octomap_server_contact_nodelet.cpp
-    "jsk_pcl/OctomapServerContact" "octomap_server_contact")
-else(robot_self_filter_FOUND)
-  message(AUTHOR_WARNING "robot_self_filter is NOT found. some nodelet depending on robot_self_filter will not be compiled.")
-endif(robot_self_filter_FOUND)
+# pkg_check_modules(robot_self_filter robot_self_filter QUIET)
+# if(robot_self_filter_FOUND)
+#   jsk_pcl_nodelet(src/collision_detector_nodelet.cpp
+#     "jsk_pcl/CollisionDetector" "collision_detector")
+#   jsk_pcl_nodelet(src/octomap_server_contact_nodelet.cpp
+#     "jsk_pcl/OctomapServerContact" "octomap_server_contact")
+# else(robot_self_filter_FOUND)
+#   message(AUTHOR_WARNING "robot_self_filter is NOT found. some nodelet depending on robot_self_filter will not be compiled.")
+# endif(robot_self_filter_FOUND)
 
 add_library(jsk_pcl_ros_base SHARED
   src/region_adjacency_graph.cpp
@@ -432,10 +432,10 @@ else (PCL_GPU_KINFU_LARGE_SCALE_FOUND)
     ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${OpenCV_LIBRARIES} yaml-cpp
     jsk_pcl_ros_base)
 endif (PCL_GPU_KINFU_LARGE_SCALE_FOUND)
-if (robot_self_filter_FOUND)
-  include_directories(include ${robot_self_filter_INCLUDE_DIRS})
-  target_link_libraries(jsk_pcl_ros ${robot_self_filter_LIBRARIES})
-endif (robot_self_filter_FOUND)
+# if (robot_self_filter_FOUND)
+#   include_directories(include ${robot_self_filter_INCLUDE_DIRS})
+#   target_link_libraries(jsk_pcl_ros ${robot_self_filter_LIBRARIES})
+# endif (robot_self_filter_FOUND)
 
 add_dependencies(jsk_pcl_ros ${PROJECT_NAME}_gencpp ${PROJECT_NAME}_gencfg)
 add_dependencies(jsk_pcl_ros_util ${PROJECT_NAME}_gencpp ${PROJECT_NAME}_gencfg)
@@ -468,30 +468,30 @@ target_link_libraries(range_sensor_error_visualization jsk_pcl_ros)
 add_executable(depth_camera_error_visualization tool/depth_camera_error_visualization.cpp)
 target_link_libraries(depth_camera_error_visualization jsk_pcl_ros)
 
-file(GLOB _headers ${PROJECT_SOURCE_DIR}/include/jsk_pcl_ros/*.h)
-list(SORT _headers)
-set(_include_headers "")
-foreach(_header ${_headers})
-  string(FIND "${_header}" kinfu IS_KINFU)
-  string(FIND "${_header}" point_types IS_POINT_TYPES)
-  if(robot_self_filter_FOUND)
-    # Exclude some headers because they include robot_self_filter headers.
-    set(IS_SELF_MASK_URDF_ROBOT -1)
-    set(IS_COLLISION_DETECTOR -1)
-    set(IS_SELF_MASK_NAMED_LINK -1)
-    set(IS_OCTOMAP_SERVER_CONTACT -1)
-  else(robot_self_filter_FOUND)
-    string(FIND "${_header}" self_mask_urdf_robot IS_SELF_MASK_URDF_ROBOT)
-    string(FIND "${_header}" collision_detector IS_COLLISION_DETECTOR)
-    string(FIND "${_header}" self_mask_named_link IS_SELF_MASK_NAMED_LINK)
-    string(FIND "${_header}" octomap_server_contact IS_OCTOMAP_SERVER_CONTACT)
-  endif(robot_self_filter_FOUND)
-  if (${IS_KINFU} EQUAL -1 AND ${IS_POINT_TYPES} EQUAL -1 AND
-      ${IS_SELF_MASK_URDF_ROBOT} EQUAL -1 AND ${IS_COLLISION_DETECTOR} EQUAL -1 AND
-      ${IS_SELF_MASK_NAMED_LINK} EQUAL -1 AND ${IS_OCTOMAP_SERVER_CONTACT} EQUAL -1)
-    set(_include_headers "${_include_headers}#include \"${_header}\"\n")
-  endif()
-endforeach()
+# file(GLOB _headers ${PROJECT_SOURCE_DIR}/include/jsk_pcl_ros/*.h)
+# list(SORT _headers)
+# set(_include_headers "")
+# foreach(_header ${_headers})
+#   string(FIND "${_header}" kinfu IS_KINFU)
+#   string(FIND "${_header}" point_types IS_POINT_TYPES)
+#   if(robot_self_filter_FOUND)
+#     # Exclude some headers because they include robot_self_filter headers.
+#     set(IS_SELF_MASK_URDF_ROBOT -1)
+#     set(IS_COLLISION_DETECTOR -1)
+#     set(IS_SELF_MASK_NAMED_LINK -1)
+#     set(IS_OCTOMAP_SERVER_CONTACT -1)
+#   else(robot_self_filter_FOUND)
+#     string(FIND "${_header}" self_mask_urdf_robot IS_SELF_MASK_URDF_ROBOT)
+#     string(FIND "${_header}" collision_detector IS_COLLISION_DETECTOR)
+#     string(FIND "${_header}" self_mask_named_link IS_SELF_MASK_NAMED_LINK)
+#     string(FIND "${_header}" octomap_server_contact IS_OCTOMAP_SERVER_CONTACT)
+#   endif(robot_self_filter_FOUND)
+#   if (${IS_KINFU} EQUAL -1 AND ${IS_POINT_TYPES} EQUAL -1 AND
+#       ${IS_SELF_MASK_URDF_ROBOT} EQUAL -1 AND ${IS_COLLISION_DETECTOR} EQUAL -1 AND
+#       ${IS_SELF_MASK_NAMED_LINK} EQUAL -1 AND ${IS_OCTOMAP_SERVER_CONTACT} EQUAL -1)
+#     set(_include_headers "${_include_headers}#include \"${_header}\"\n")
+#   endif()
+# endforeach()
 
 generate_messages(DEPENDENCIES
   ${PCL_MSGS} sensor_msgs geometry_msgs jsk_recognition_msgs jsk_footstep_msgs)
