@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/o2r other materials provided
  *     with the distribution.
- *   * Neither the name of the Willow Garage nor the names of its
+ *   * Neither the name of the JSK Lab nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -40,7 +40,7 @@
 #include <pcl/io/io.h>
 #include <pcl_ros/transforms.h>
 #include <boost/format.hpp>
-#include "jsk_pcl_ros/SlicedPointCloud.h"
+#include "jsk_recognition_msgs/SlicedPointCloud.h"
 
 namespace jsk_pcl_ros
 {
@@ -57,7 +57,7 @@ namespace jsk_pcl_ros
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr output_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     if (grid_.size() == 0) {
-      ROS_INFO("the number of registered grids is 0, skipping");
+      JSK_NODELET_DEBUG("the number of registered grids is 0, skipping");
       return;
     }
     fromROSMsg(*input, *cloud);
@@ -73,7 +73,7 @@ namespace jsk_pcl_ros
       pcl_ros::transformPointCloud(target_grid->header.frame_id,
                                    *cloud,
                                    *transformed_cloud,
-                                   tf_listener);
+                                   *tf_listener);
       double center_x = target_grid->pose.position.x;
       double center_y = target_grid->pose.position.y;
       double center_z = target_grid->pose.position.z;
@@ -99,9 +99,9 @@ namespace jsk_pcl_ros
       pass_z.setFilterFieldName("z");
       pass_z.setFilterLimits(min_z, max_z);
 
-      ROS_INFO_STREAM(id << " filter x: " << min_x << " - " << max_x);
-      ROS_INFO_STREAM(id << " filter y: " << min_y << " - " << max_y);
-      ROS_INFO_STREAM(id << " filter z: " << min_z << " - " << max_z);
+      JSK_NODELET_DEBUG_STREAM(id << " filter x: " << min_x << " - " << max_x);
+      JSK_NODELET_DEBUG_STREAM(id << " filter y: " << min_y << " - " << max_y);
+      JSK_NODELET_DEBUG_STREAM(id << " filter z: " << min_z << " - " << max_z);
       
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_after_x (new pcl::PointCloud<pcl::PointXYZRGB>);
       pass_x.setInputCloud (transformed_cloud);
@@ -127,7 +127,7 @@ namespace jsk_pcl_ros
       pcl_ros::transformPointCloud(input->header.frame_id,
                                    *cloud_filtered,
                                    *reverse_transformed_cloud,
-                                   tf_listener);
+                                   *tf_listener);
       
       // adding the output into *output_cloud
       // tmp <- cloud_filtered + output_cloud
@@ -135,7 +135,7 @@ namespace jsk_pcl_ros
       //pcl::PointCloud<pcl::PointXYZRGB>::Ptr tmp (new pcl::PointCloud<pcl::PointXYZRGB>);
       //pcl::concatenatePointCloud (*cloud_filtered, *output_cloud, tmp);
       //output_cloud = tmp;
-      ROS_INFO_STREAM(id << " includes " << reverse_transformed_cloud->points.size() << " points");
+      JSK_NODELET_DEBUG_STREAM(id << " includes " << reverse_transformed_cloud->points.size() << " points");
       for (size_t i = 0; i < reverse_transformed_cloud->points.size(); i++) {
         output_cloud->points.push_back(reverse_transformed_cloud->points[i]);
       }
@@ -147,7 +147,7 @@ namespace jsk_pcl_ros
 
     // for concatenater
     size_t cluster_num = output_cloud->points.size() / max_points_ + 1;
-    ROS_INFO_STREAM("encoding into " << cluster_num << " clusters");
+    JSK_NODELET_DEBUG_STREAM("encoding into " << cluster_num << " clusters");
     for (size_t i = 0; i < cluster_num; i++) {
       size_t start_index = max_points_ * i;
       size_t end_index = max_points_ * (i + 1) > output_cloud->points.size() ?
@@ -157,13 +157,13 @@ namespace jsk_pcl_ros
         cluster_out_pcl(new pcl::PointCloud<pcl::PointXYZRGB>);
       cluster_out_pcl->points.resize(end_index - start_index);
       // build cluster_out_pcl
-      ROS_INFO_STREAM("make cluster from " << start_index << " to " << end_index);
+      JSK_NODELET_DEBUG_STREAM("make cluster from " << start_index << " to " << end_index);
       for (size_t j = start_index; j < end_index; j++) {
         cluster_out_pcl->points[j - start_index] = output_cloud->points[j];
       }
       // conevrt cluster_out_pcl into ros msg
       toROSMsg(*cluster_out_pcl, cluster_out_ros);
-      jsk_pcl_ros::SlicedPointCloud publish_point_cloud;
+      jsk_recognition_msgs::SlicedPointCloud publish_point_cloud;
       cluster_out_ros.header = input->header;
       publish_point_cloud.point_cloud = cluster_out_ros;
       publish_point_cloud.slice_index = i;
@@ -173,7 +173,7 @@ namespace jsk_pcl_ros
     }
     }
     catch (std::runtime_error e) { // catch any error
-      NODELET_WARN_STREAM("error has occured in VoxelGridDownsampleManager but ignore it: " << e.what());
+      JSK_NODELET_WARN_STREAM("error has occured in VoxelGridDownsampleManager but ignore it: " << e.what());
       ros::Duration(1.0 / rate_).sleep();
     }
   }
@@ -184,17 +184,17 @@ namespace jsk_pcl_ros
     // check we have new_box->id in our bounding_boxes_
     if (new_box->id == -1) {
       // cancel all
-      ROS_INFO("clear all pointclouds");
+      JSK_NODELET_DEBUG("clear all pointclouds");
       clearAll();
     }
     else {
       for (size_t i = 0; i < grid_.size(); i++) {
         if (grid_[i]->id == new_box->id) {
-          ROS_INFO_STREAM("updating " << new_box->id << " grid");
+          JSK_NODELET_DEBUG_STREAM("updating " << new_box->id << " grid");
           grid_[i] = new_box;
         }
       }
-      ROS_INFO_STREAM("adding new grid: " << new_box->id);
+      JSK_NODELET_DEBUG_STREAM("adding new grid: " << new_box->id);
       grid_.push_back(new_box);
     }
   }
@@ -218,21 +218,39 @@ namespace jsk_pcl_ros
   
   void VoxelGridDownsampleManager::onInit(void)
   {
-    PCLNodelet::onInit();
+    ConnectionBasedNodelet::onInit();
     pnh_->param("base_frame", base_frame_, std::string("pelvis"));
-
+    tf_listener = TfListenerSingleton::getInstance();
     initializeGrid();
     sequence_id_ = 0;
+
+    int max_points_param;
+    pnh_->param("max_points", max_points_param, 300);
+    pnh_->param("rate", rate_, 1.0);
+    max_points_  = max_points_param;
+    
+    pub_ = advertise<sensor_msgs::PointCloud2>(
+      *pnh_, "output", 1);
+    pub_encoded_ = advertise<jsk_recognition_msgs::SlicedPointCloud>(
+      *pnh_, "output_encoded", 1);
+    
+  }
+
+  void VoxelGridDownsampleManager::subscribe()
+  {
     sub_ = pnh_->subscribe("input", 1, &VoxelGridDownsampleManager::pointCB,
                            this);
     bounding_box_sub_ = pnh_->subscribe("add_grid", 1, &VoxelGridDownsampleManager::addGrid,
                                         this);
-    pub_ = pnh_->advertise<sensor_msgs::PointCloud2>("output", 1);
-    pub_encoded_ = pnh_->advertise<jsk_pcl_ros::SlicedPointCloud>("output_encoded", 1);
-    max_points_ = 300;
-    rate_ = 1.0;                // 1Hz
   }
+
+  void VoxelGridDownsampleManager::unsubscribe()
+  {
+    sub_.shutdown();
+    bounding_box_sub_.shutdown();
+  }
+  
 }
 
-typedef jsk_pcl_ros::VoxelGridDownsampleManager VoxelGridDownsampleManager;
-PLUGINLIB_DECLARE_CLASS (jsk_pcl, VoxelGridDownsampleManager, VoxelGridDownsampleManager, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS (jsk_pcl_ros::VoxelGridDownsampleManager,
+                        nodelet::Nodelet);

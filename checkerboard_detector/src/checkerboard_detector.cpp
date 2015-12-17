@@ -1,5 +1,6 @@
+// -*- mode: c++; indent-tabs-mode: nil; c-basic-offset: 4; -*-
 // Software License Agreement (BSD License)
-// Copyright (c) 2008, Willow Garage, Inc.
+// Copyright (c) 2008, JSK Lab, Inc.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
 //   * Redistributions of source code must retain the above copyright notice,
@@ -23,23 +24,30 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 // author: Rosen Diankov
+#include <algorithm>
+
 #include <cstdio>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 #include <ros/ros.h>
 
 #include <boost/thread/mutex.hpp>
 
-#include "opencv/cv.h"
-#include "opencv/highgui.h"
+#include "opencv2/opencv.hpp"
 #include "cv_bridge/cv_bridge.h"
 #include "sensor_msgs/image_encodings.h"
 #include "sensor_msgs/CameraInfo.h"
 #include "sensor_msgs/Image.h"
+#include "image_geometry/pinhole_camera_model.h"
 #include "posedetection_msgs/ObjectDetection.h"
 #include "posedetection_msgs/Detect.h"
+#include "geometry_msgs/PointStamped.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "math.h"
-
+#include "geometry_msgs/PolygonStamped.h"
+#include "jsk_recognition_msgs/PolygonArray.h"
+#include "eigen_conversions/eigen_msg.h"
 #include <sys/timeb.h>    // ftime(), struct timeb
 #include <sys/time.h>
 
@@ -59,47 +67,53 @@ public:
     struct CHECKERBOARD
     {
         CvSize griddims; ///< number of squares
-        vector<Vector> grid3d;
-        vector<CvPoint2D32f> corners;
+        vector<cv::Point3f> grid3d;
+        //vector<CvPoint2D32f> corners;
+        //cv::Mat corners;
+        vector<cv::Point2f> corners;
         TransformMatrix tlocaltrans;
+        std::string board_type;
     };
 
     posedetection_msgs::ObjectDetection _objdetmsg;
-    cv_bridge::CvImagePtr capture;
     sensor_msgs::CameraInfo _camInfoMsg;
 
     ros::Subscriber camInfoSubscriber,camInfoSubscriber2;
     ros::Subscriber imageSubscriber,imageSubscriber2;
     ros::Publisher _pubDetection;
+    ros::Publisher _pubPoseStamped;
+    ros::Publisher _pubCornerPoint;
+    ros::Publisher _pubPolygonArray;
     ros::ServiceServer _srvDetect;
-
+    int message_throttle_;
+    int message_throttle_counter_;
     string frame_id; // tf frame id
-
+    bool invert_color;
     int display, verbose, maxboard;
     vector<CHECKERBOARD> vcheckers; // grid points for every checkerboard
     vector< string > vstrtypes; // type names for every grid point
     map<string,int> maptypes;
     ros::Time lasttime;
-    CvMat *intrinsic_matrix; // intrinsic matrices
     boost::mutex mutexcalib;
-    IplImage* frame;
-
     ros::NodeHandle _node;
+    int dimx, dimy;
+    bool use_P;
+    double fRectSize[2];
 
     //////////////////////////////////////////////////////////////////////////////
     // Constructor
-    CheckerboardDetector() : intrinsic_matrix(NULL), frame(NULL)
+    CheckerboardDetector()
     {
         _node.param("display", display, 0);
         _node.param("verbose", verbose, 1);
         _node.param("maxboard", maxboard, -1);
-        
+        _node.param("invert_color", invert_color, false);
+        _node.param("use_P", use_P, false);
+        _node.param("message_throttle", message_throttle_, 1);
         char str[32];
         int index = 0;
 
         while(1) {
-            int dimx, dimy;
-            double fRectSize[2];
             string type;
 
             sprintf(str,"grid%d_size_x",index);
@@ -132,6 +146,10 @@ public:
                 type = str;
             }
 
+            std::string board_type;
+            _node.param("board_type", board_type, std::string("chess"));
+            
+            
             string strtranslation,strrotation;
             sprintf(str,"translation%d",index);
             _node.param(str,strtranslation,string());
@@ -144,12 +162,23 @@ public:
 
             CHECKERBOARD cb;
             cb.griddims = cvSize(dimx,dimy);
-
+            cb.board_type = board_type;
             cb.grid3d.resize(dimx*dimy);
             int j=0;
-            for(int y=0; y<dimy; ++y)
+            if (board_type == "chess" || board_type == "circle") {
+              for(int y=0; y<dimy; ++y)
                 for(int x=0; x<dimx; ++x)
-                    cb.grid3d[j++] = Vector(x*fRectSize[0], y*fRectSize[1], 0);
+                  cb.grid3d[j++] = cv::Point3f(x*fRectSize[0], y*fRectSize[1], 0);
+            }
+            else if (board_type == "acircle") {
+              for(int ii=0; ii<dimy; ii++) {
+                for(int jj=0; jj<dimx; jj++) {
+                  cb.grid3d[j++] = cv::Point3f((2*jj + ii % 2)*fRectSize[0],
+                                          ii*fRectSize[1],
+                                          0);
+                }
+              }
+            }
 
             if( vtranslation.size() == 3 )
                 cb.tlocaltrans.trans = 
@@ -177,18 +206,31 @@ public:
         }
 
         if( display ) {
-	  // enable to set other window flag // use display value if display != 1 because only CV_WINDOW_AUTOSIZE is supported officially
-	  cvNamedWindow("Checkerboard Detector", (display == 1? CV_WINDOW_AUTOSIZE : display));
-            cvStartWindowThread();
+          cv::namedWindow("Checkerboard Detector",
+                          (display == 1? CV_WINDOW_NORMAL : display));
         }
 
         lasttime = ros::Time::now();
-
-        ros::SubscriberStatusCallback connect_cb = boost::bind( &CheckerboardDetector::connectCb, this);
-        _pubDetection =
-          _node.advertise<posedetection_msgs::ObjectDetection> ("ObjectDetection", 1,
-                                                                connect_cb, connect_cb);
-
+        if (!display) {
+            ros::SubscriberStatusCallback connect_cb = boost::bind( &CheckerboardDetector::connectCb, this);
+            _pubDetection =
+                _node.advertise<posedetection_msgs::ObjectDetection> ("ObjectDetection", 1,
+                                                                      connect_cb, connect_cb);
+            _pubPoseStamped =
+                _node.advertise<geometry_msgs::PoseStamped> ("objectdetection_pose", 1,
+                                                             connect_cb, connect_cb);
+            _pubCornerPoint = _node.advertise<geometry_msgs::PointStamped>("corner_point", 1, connect_cb, connect_cb);
+            _pubPolygonArray = _node.advertise<jsk_recognition_msgs::PolygonArray>("polygons", 1, connect_cb, connect_cb);
+        }
+        else {
+            _pubDetection =
+                _node.advertise<posedetection_msgs::ObjectDetection> ("ObjectDetection", 1);
+            _pubPoseStamped =
+                _node.advertise<geometry_msgs::PoseStamped> ("objectdetection_pose", 1);
+            _pubCornerPoint = _node.advertise<geometry_msgs::PointStamped>("corner_point", 1);
+            _pubPolygonArray = _node.advertise<jsk_recognition_msgs::PolygonArray>("polygons", 1);
+            subscribe();
+        }
         //this->camInfoSubscriber = _node.subscribe("camera_info", 1, &CheckerboardDetector::caminfo_cb, this);
         //this->imageSubscriber = _node.subscribe("image",1, &CheckerboardDetector::image_cb, this);
         //this->camInfoSubscriber2 = _node.subscribe("CameraInfo", 1, &CheckerboardDetector::caminfo_cb2, this);
@@ -200,15 +242,6 @@ public:
     // Destructor
     virtual ~CheckerboardDetector()
     {
-        if( frame )
-            cvReleaseImage(&frame);
-        if( this->intrinsic_matrix )
-            cvReleaseMat(&this->intrinsic_matrix);
-        _srvDetect.shutdown();
-        this->camInfoSubscriber.shutdown();
-        this->imageSubscriber.shutdown();
-        this->camInfoSubscriber2.shutdown();
-        this->imageSubscriber2.shutdown();
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -228,13 +261,57 @@ public:
         ROS_WARN("The topic CameraInfo has been deprecated.  Please change your launch file to use camera_info instead.");
         caminfo_cb(msg);
     }
+    
+    void publishPolygonArray(const posedetection_msgs::ObjectDetection& obj)
+    {
+        jsk_recognition_msgs::PolygonArray polygon_array;
+        polygon_array.header = obj.header;
+        for (size_t i = 0; i < obj.objects.size(); i++) {
+            geometry_msgs::Pose pose = obj.objects[i].pose;
+            Eigen::Affine3d affine;
+            tf::poseMsgToEigen(pose, affine);
+            Eigen::Vector3d A_local(0, 0, 0);
+            Eigen::Vector3d B_local((dimx - 1) * fRectSize[0], 0, 0);
+            Eigen::Vector3d C_local((dimx - 1) * fRectSize[0], (dimy - 1) * fRectSize[1], 0);
+            Eigen::Vector3d D_local(0, (dimy - 1) * fRectSize[1], 0);
+            Eigen::Vector3d A_global = affine * A_local;
+            Eigen::Vector3d B_global = affine * B_local;
+            Eigen::Vector3d C_global = affine * C_local;
+            Eigen::Vector3d D_global = affine * D_local;
+            geometry_msgs::Point32 a, b, c, d;
+            a.x = A_global[0]; a.y = A_global[1]; a.z = A_global[2];
+            b.x = B_global[0]; b.y = B_global[1]; b.z = B_global[2];
+            c.x = C_global[0]; c.y = C_global[1]; c.z = C_global[2];
+            d.x = D_global[0]; d.y = D_global[1]; d.z = D_global[2];
+            geometry_msgs::PolygonStamped polygon;
+            polygon.header = obj.header;
+            polygon.polygon.points.push_back(a);
+            polygon.polygon.points.push_back(b);
+            polygon.polygon.points.push_back(c);
+            polygon.polygon.points.push_back(d);
+            polygon_array.polygons.push_back(polygon);
+        }
+        _pubPolygonArray.publish(polygon_array);
+    }
 
     void image_cb2(const sensor_msgs::ImageConstPtr &msg)
     {
         ROS_WARN("The topic Image has been deprecated.  Please change your launch file to use image instead.");
         boost::mutex::scoped_lock lock(this->mutexcalib);
-        if( Detect(_objdetmsg,*msg,this->_camInfoMsg) )
-            _pubDetection.publish(_objdetmsg);
+        ++message_throttle_counter_;
+        if (message_throttle_counter_ % message_throttle_ == 0) {
+            message_throttle_counter_ = 0;
+            if( Detect(_objdetmsg,*msg,this->_camInfoMsg) ) {
+                if (_objdetmsg.objects.size() > 0) {
+                    geometry_msgs::PoseStamped pose;
+                    pose.header = _objdetmsg.header;
+                    pose.pose = _objdetmsg.objects[0].pose;
+                    _pubPoseStamped.publish(pose);
+                }
+                _pubDetection.publish(_objdetmsg);
+                publishPolygonArray(_objdetmsg);
+            }
+        }
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -242,70 +319,132 @@ public:
     void image_cb(const sensor_msgs::ImageConstPtr &msg)
     {
         boost::mutex::scoped_lock lock(this->mutexcalib);
-        if( Detect(_objdetmsg,*msg,this->_camInfoMsg) )
-            _pubDetection.publish(_objdetmsg);
+        ++message_throttle_counter_;
+        if (message_throttle_counter_ % message_throttle_ == 0) {
+            message_throttle_counter_ = 0;
+            if( Detect(_objdetmsg,*msg,this->_camInfoMsg) ) {
+                if (_objdetmsg.objects.size() > 0) {
+                    geometry_msgs::PoseStamped pose;
+                    pose.header = _objdetmsg.header;
+                    pose.pose = _objdetmsg.objects[0].pose;
+                    _pubPoseStamped.publish(pose);
+                }
+                _pubDetection.publish(_objdetmsg);
+                publishPolygonArray(_objdetmsg);
+            }
+        }
     }
 
     bool detect_cb(posedetection_msgs::Detect::Request& req, posedetection_msgs::Detect::Response& res)
     {
-        return Detect(res.object_detection,req.image,req.camera_info);
+        bool result = Detect(res.object_detection,req.image,req.camera_info);
+        return result;
     }
 
-    //
+
+    void subscribe( )
+    {
+        if ( camInfoSubscriber == NULL )
+            camInfoSubscriber = _node.subscribe("camera_info", 1, &CheckerboardDetector::caminfo_cb, this);
+        if ( imageSubscriber == NULL )
+            imageSubscriber = _node.subscribe("image", 1, &CheckerboardDetector::image_cb, this);
+        if ( camInfoSubscriber2 == NULL )
+            camInfoSubscriber2 = _node.subscribe("CameraInfo", 1, &CheckerboardDetector::caminfo_cb2, this);
+        if ( imageSubscriber2 == NULL )
+            imageSubscriber2 = _node.subscribe("Image",1, &CheckerboardDetector::image_cb2, this);
+
+    }
+
+    void unsubscribe( )
+    {
+        camInfoSubscriber.shutdown();
+        camInfoSubscriber2.shutdown();
+        imageSubscriber.shutdown();
+        imageSubscriber2.shutdown();
+    }
+    
     void connectCb( )
     {
       boost::mutex::scoped_lock lock(this->mutexcalib);
-      if (_pubDetection.getNumSubscribers() == 0)
+      if (_pubDetection.getNumSubscribers() == 0 && _pubCornerPoint.getNumSubscribers() == 0 &&
+          _pubPoseStamped.getNumSubscribers() == 0 && _pubPolygonArray.getNumSubscribers() == 0)
         {
-          camInfoSubscriber.shutdown();
-          camInfoSubscriber2.shutdown();
-          imageSubscriber.shutdown();
-          imageSubscriber2.shutdown();
+            unsubscribe();
         }
       else
         {
-          if ( camInfoSubscriber == NULL )
-            camInfoSubscriber = _node.subscribe("camera_info", 1, &CheckerboardDetector::caminfo_cb, this);
-          if ( imageSubscriber == NULL )
-            imageSubscriber = _node.subscribe("image", 1, &CheckerboardDetector::image_cb, this);
-          if ( camInfoSubscriber2 == NULL )
-            camInfoSubscriber2 = _node.subscribe("CameraInfo", 1, &CheckerboardDetector::caminfo_cb2, this);
-          if ( imageSubscriber2 == NULL )
-            imageSubscriber2 = _node.subscribe("Image",1, &CheckerboardDetector::image_cb2, this);
+            subscribe();
         }
     }
 
-    bool Detect(posedetection_msgs::ObjectDetection& objdetmsg, const sensor_msgs::Image& imagemsg, const sensor_msgs::CameraInfo& camInfoMsg)
+    bool Detect(posedetection_msgs::ObjectDetection& objdetmsg,
+                const sensor_msgs::Image& imagemsg,
+                const sensor_msgs::CameraInfo& camInfoMsg)
     {
-        if( this->intrinsic_matrix == NULL )
-            this->intrinsic_matrix = cvCreateMat(3,3,CV_32FC1);
-
-        for(int i = 0; i < 3; ++i)
-            for(int j = 0; j < 3; ++j)
-                this->intrinsic_matrix->data.fl[3*i+j] = camInfoMsg.P[4*i+j];
-
+        image_geometry::PinholeCameraModel model;
+        sensor_msgs::CameraInfo cam_info(camInfoMsg);
+        if (cam_info.distortion_model.empty()) {
+            cam_info.distortion_model = "plumb_bob";
+            cam_info.D.resize(5, 0);
+        }
+        if (use_P) {
+            for (size_t i = 0; i < cam_info.D.size(); i++) {
+                cam_info.D[i] = 0.0;
+            }
+        }
+        // check all the value of R is zero or not
+        // if zero, normalzie it
+        if (use_P || std::equal(cam_info.R.begin() + 1, cam_info.R.end(), cam_info.R.begin())) {
+            cam_info.R[0] = 1.0;
+            cam_info.R[4] = 1.0;
+            cam_info.R[8] = 1.0;
+        }
+        // check all the value of K is zero or not
+        // if zero, copy all the value from P
+        if (use_P || std::equal(cam_info.K.begin() + 1, cam_info.K.end(), cam_info.K.begin())) {
+            cam_info.K[0] = cam_info.P[0];
+            cam_info.K[1] = cam_info.P[1];
+            cam_info.K[2] = cam_info.P[2];
+            cam_info.K[3] = cam_info.P[4];
+            cam_info.K[4] = cam_info.P[5];
+            cam_info.K[5] = cam_info.P[6];
+            cam_info.K[6] = cam_info.P[8];
+            cam_info.K[7] = cam_info.P[9];
+            cam_info.K[8] = cam_info.P[10];
+        }
+        model.fromCameraInfo(cam_info);
+        cv_bridge::CvImagePtr capture_ptr;
         try {
-            capture = cv_bridge::toCvCopy(imagemsg, sensor_msgs::image_encodings::MONO8);
+          if (imagemsg.encoding == "32FC1") {
+            cv_bridge::CvImagePtr float_capture
+              = cv_bridge::toCvCopy(imagemsg,
+                                    sensor_msgs::image_encodings::TYPE_32FC1);
+            cv::Mat float_image = float_capture->image;
+            cv::Mat mono_image;
+            float_image.convertTo(mono_image, CV_8UC1);
+            capture_ptr.reset(new cv_bridge::CvImage());
+            capture_ptr->image = mono_image;
+          }
+          else {
+            capture_ptr = cv_bridge::toCvCopy(imagemsg, sensor_msgs::image_encodings::MONO8);
+          }
         } catch (cv_bridge::Exception &e) {
             ROS_ERROR("failed to get image %s", e.what());
             return false;
         }
+        cv::Mat capture = capture_ptr->image;
+        if (invert_color) {
+            capture = cv::Mat((capture + 0.0) * 1.0 / 1.0) * 1.0;
+            //capture = 255 - capture;
+            cv::Mat tmp;
+            cv::bitwise_not(capture, tmp);
+            capture = tmp;
+        }
 
-        IplImage imggray = capture->image;
-        IplImage *pimggray = &imggray;
+        cv::Mat frame;
+        
         if( display ) {
-            // copy the raw image
-            if( frame != NULL && (frame->width != (int)imagemsg.width || frame->height != (int)imagemsg.height) ) {
-                cvReleaseImage(&frame);
-                frame = NULL;
-            }
-            imggray = capture->image;
-            pimggray = &imggray;
-
-            if( frame == NULL ) 
-                frame = cvCreateImage(cvSize(imagemsg.width,imagemsg.height),IPL_DEPTH_8U, 3);
-
-            cvCvtColor(pimggray,frame,CV_GRAY2RGB);
+            cv::cvtColor(capture, frame, CV_GRAY2BGR);
         }
 
         vector<posedetection_msgs::Object6DPose> vobjects;
@@ -318,15 +457,26 @@ public:
 
             // do until no more checkerboards detected
             while((maxboard==-1)?1:((++board)<=maxboard)) {
-                cb.corners.resize(200);
-                int allfound = cvFindChessboardCorners( pimggray, cb.griddims, &cb.corners[0], &ncorners,
-                                                        CV_CALIB_CB_ADAPTIVE_THRESH );
-                cb.corners.resize(ncorners);
+                bool allfound = false;
+                if (cb.board_type == "chess") {
+                    allfound = cv::findChessboardCorners(
+                        capture, cb.griddims, cb.corners);
+                }
+                else if (cb.board_type == "circle" ||
+                         cb.board_type == "circles") {
+                    allfound =
+                        cv::findCirclesGrid(capture, cb.griddims, cb.corners);
+                }
+                else if (cb.board_type == "acircle" ||
+                         cb.board_type == "acircles") {
+                    // sometime cv::findCirclesGrid hangs
+                    allfound =
+                        cv::findCirclesGrid(
+                            capture, cb.griddims, cb.corners,
+                            cv::CALIB_CB_ASYMMETRIC_GRID | cv::CALIB_CB_CLUSTERING);
+                }
 
-                //cvDrawChessboardCorners(pimgGray, itbox->second.griddims, &corners[0], ncorners, allfound);
-                //cvSaveImage("temp.jpg", pimgGray);
-
-                if(!allfound || ncorners != (int)cb.grid3d.size())
+                if(!allfound || cb.corners.size() != cb.grid3d.size())
                     break;
 
                 // remove any corners that are close to the border
@@ -335,19 +485,19 @@ public:
                 for(int j = 0; j < ncorners; ++j) {
                     int x = cb.corners[j].x;
                     int y = cb.corners[j].y;
-                    if( x < borderthresh || x > pimggray->width-borderthresh ||
-                        y < borderthresh || y > pimggray->height-borderthresh )
+                    if( x < borderthresh || x > capture.cols - borderthresh ||
+                        y < borderthresh || y > capture.rows - borderthresh )
                     {
-                        allfound = 0;
+                        allfound = false;
                         break;
                     }
                 }
 
                 // mark out the image
-                CvPoint upperleft, lowerright;
+                cv::Point upperleft, lowerright;
                 upperleft.x = lowerright.x = cb.corners[0].x;
                 upperleft.y = lowerright.y = cb.corners[0].y;
-                for(int j = 1; j < (int)cb.corners.size(); ++j) {
+                for(size_t j = 1; j < cb.corners.size(); ++j) {
                     if( upperleft.x > cb.corners[j].x ) upperleft.x = cb.corners[j].x;
                     if( upperleft.y > cb.corners[j].y ) upperleft.y = cb.corners[j].y;
                     if( lowerright.x < cb.corners[j].x ) lowerright.x = cb.corners[j].x;
@@ -367,9 +517,12 @@ public:
                 int size = (int)(0.5*sqrt(step_size) + 0.5);
 
                 if( allfound ) {
-                    cvFindCornerSubPix(pimggray, &cb.corners[0], cb.corners.size(), cvSize(size,size), cvSize(-1,-1),
-                                       cvTermCriteria(CV_TERMCRIT_ITER, 50, 1e-2));
-                    objpose.pose = FindTransformation(cb.corners, cb.grid3d, cb.tlocaltrans);
+                    if (cb.board_type == "chess") { // subpixel only for chessboard
+                        cv::cornerSubPix(capture, cb.corners,
+                                         cv::Size(size,size), cv::Size(-1,-1),
+                                         cv::TermCriteria(CV_TERMCRIT_ITER, 50, 1e-2));
+                    }
+                    objpose.pose = FindTransformation(cb.corners, cb.grid3d, cb.tlocaltrans, model);
                 }
 
 #pragma omp critical
@@ -378,8 +531,8 @@ public:
                         vobjects.push_back(objpose);
                         vobjects.back().type = vstrtypes[i];
                     }
-
-                    cvRectangle(pimggray, upperleft, lowerright, CV_RGB(0,0,0),CV_FILLED);
+                    cv::rectangle(capture, upperleft, lowerright,
+                                  cv::Scalar(0,0,0), CV_FILLED);
                 }
             }
 
@@ -394,9 +547,10 @@ public:
             objdetmsg.header.frame_id = imagemsg.header.frame_id;
 
         if( verbose > 0 )
-            ROS_INFO("checkerboard: image: %ux%u (size=%u), num: %u, total: %.3fs",imagemsg.width,imagemsg.height,
+            ROS_INFO("checkerboard: image: %ux%u (size=%u), num: %u, total: %.3fs",
+                     imagemsg.width, imagemsg.height,
                      (unsigned int)imagemsg.data.size(), (unsigned int)objdetmsg.objects.size(),
-                     (float)(ros::Time::now()-lasttime).toSec());
+                     (float)(ros::Time::now() - lasttime).toSec());
         lasttime = ros::Time::now();
 
         if( display ) {
@@ -409,7 +563,7 @@ public:
                 tglobal.rot = Vector(vobjects[i].pose.orientation.w,vobjects[i].pose.orientation.x,vobjects[i].pose.orientation.y, vobjects[i].pose.orientation.z);
                 Transform tlocal = tglobal * cb.tlocaltrans.inverse();
 
-                CvPoint X[4];
+                cv::Point X[4];
 
                 Vector vaxes[4];
                 vaxes[0] = Vector(0,0,0);
@@ -427,30 +581,40 @@ public:
                 }
 
                 // draw three lines
-                CvScalar col0 = CV_RGB(255,0,(64*itype)%256);
-                CvScalar col1 = CV_RGB(0,255,(64*itype)%256);
-                CvScalar col2 = CV_RGB((64*itype)%256,(64*itype)%256,255);
-                cvLine(frame, X[0], X[1], col0, 1);
-                cvLine(frame, X[0], X[2], col1, 1);
-                cvLine(frame, X[0], X[3], col2, 1);
+                cv::Scalar col0(255,0,(64*itype)%256);
+                cv::Scalar col1(0,255,(64*itype)%256);
+                cv::Scalar col2((64*itype)%256,(64*itype)%256,255);
+                cv::line(frame, X[0], X[1], col0, 1);
+                cv::line(frame, X[0], X[2], col1, 1);
+                cv::line(frame, X[0], X[3], col2, 1);
 
                 // draw all the points
                 for(size_t i = 0; i < cb.grid3d.size(); ++i) {
-                    Vector p = tlocal * cb.grid3d[i];
+                    Vector grid3d_vec(cb.grid3d[i].x, cb.grid3d[i].y, cb.grid3d[i].z);
+                    Vector p = tlocal * grid3d_vec;
                     dReal fx = p.x*camInfoMsg.P[0] + p.y*camInfoMsg.P[1] + p.z*camInfoMsg.P[2] + camInfoMsg.P[3];
                     dReal fy = p.x*camInfoMsg.P[4] + p.y*camInfoMsg.P[5] + p.z*camInfoMsg.P[6] + camInfoMsg.P[7];
                     dReal fz = p.x*camInfoMsg.P[8] + p.y*camInfoMsg.P[9] + p.z*camInfoMsg.P[10] + camInfoMsg.P[11];
                     int x = (int)(fx/fz);
                     int y = (int)(fy/fz);
-                    cvCircle(frame, cvPoint(x,y), 6, CV_RGB(0,0,0), 2);
-                    cvCircle(frame, cvPoint(x,y), 2, CV_RGB(0,0,0), 2);
-                    cvCircle(frame, cvPoint(x,y), 4, CV_RGB(128,128,64*itype), 3);
+                    cv::circle(frame, cv::Point(x,y), 6, cv::Scalar(0,0,0), 2);
+                    cv::circle(frame, cv::Point(x,y), 2, cv::Scalar(0,0,0), 2);
+                    cv::circle(frame, cv::Point(x,y), 4, cv::Scalar(64*itype,128,128), 3);
                 }
 
-                cvCircle(frame, X[0], 3, CV_RGB(255,255,128), 3);
+                cv::circle(frame, X[0], 3, cv::Scalar(255,255,128), 3);
+                // publish X[0]
+                geometry_msgs::PointStamped point_msg;
+                point_msg.header = imagemsg.header;
+                point_msg.point.x = X[0].x;
+                point_msg.point.y = X[0].y;
+                point_msg.point.z = vobjects[vobjects.size() - 1].pose.position.z;
+                _pubCornerPoint.publish(point_msg);
+                
             }
 
-            cvShowImage("Checkerboard Detector",frame);
+            cv::imshow("Checkerboard Detector",frame);
+            cv::waitKey(1);
         }
 
         return true;
@@ -459,34 +623,25 @@ public:
 
     //////////////////////////////////////////////////////////////////////////////
     // FindTransformation
-    geometry_msgs::Pose FindTransformation(const vector<CvPoint2D32f> &imgpts, const vector<Vector> &objpts, const Transform& tlocal)
+    geometry_msgs::Pose FindTransformation(
+        const vector<cv::Point2f> &imgpts, const vector<cv::Point3f> &objpts,
+        const Transform& tlocal,
+        const image_geometry::PinholeCameraModel& model)
     {
-        CvMat *objpoints = cvCreateMat(3,objpts.size(),CV_32FC1);
-        for(size_t i=0; i<objpts.size(); ++i) {
-            cvSetReal2D(objpoints, 0,i, objpts[i].x);
-            cvSetReal2D(objpoints, 1,i, objpts[i].y);
-            cvSetReal2D(objpoints, 2,i, objpts[i].z);
-        }
-
         geometry_msgs::Pose pose;
         Transform tchecker;
-        assert(sizeof(tchecker.trans.x)==sizeof(float));
-        float fR3[3];
-        CvMat R3, T3;
-        assert(sizeof(pose.position.x) == sizeof(double));
-        cvInitMatHeader(&R3, 3, 1, CV_32FC1, fR3);
-        cvInitMatHeader(&T3, 3, 1, CV_32FC1, &tchecker.trans.x);
-
-        float kc[4] = {0};
-        CvMat kcmat;
-        cvInitMatHeader(&kcmat,1,4,CV_32FC1,kc);
-
-        CvMat img_points;
-        cvInitMatHeader(&img_points, 1,imgpts.size(), CV_32FC2, const_cast<CvPoint2D32f*>(&imgpts[0]));
-
-        cvFindExtrinsicCameraParams2(objpoints, &img_points, this->intrinsic_matrix, &kcmat, &R3, &T3);
-        cvReleaseMat(&objpoints);
-
+        cv::Mat R3_mat, T3_mat;
+        cv::solvePnP(objpts, imgpts,
+                     model.intrinsicMatrix(),
+                     model.distortionCoeffs(),
+                     R3_mat, T3_mat, false);
+        double fR3[3];
+        for (size_t i = 0; i < 3; i++) {
+          fR3[i] = R3_mat.at<double>(i);
+        }
+        tchecker.trans.x = T3_mat.at<double>(0);
+        tchecker.trans.y = T3_mat.at<double>(1);
+        tchecker.trans.z = T3_mat.at<double>(2);
         double fang = sqrt(fR3[0]*fR3[0] + fR3[1]*fR3[1] + fR3[2]*fR3[2]);
         if( fang >= 1e-6 ) {
             double fmult = sin(fang/2)/fang;

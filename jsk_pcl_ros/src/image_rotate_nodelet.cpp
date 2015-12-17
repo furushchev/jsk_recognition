@@ -2,7 +2,7 @@
 * Software License Agreement (BSD License)
 *
 *  Copyright (c) 2014, JSK Lab.
-*                2008, Willow Garage, Inc.
+*                2008, JSK Lab, Inc.
 *  All rights reserved.
 * 
 *  Redistribution and use in source and binary forms, with or without
@@ -15,7 +15,7 @@
 *     copyright notice, this list of conditions and the following
 *     disclaimer in the documentation and/or other materials provided
 *     with the distribution.
-*   * Neither the name of the Willow Garage nor the names of its
+*   * Neither the name of the JSK Lab nor the names of its
 *     contributors may be used to endorse or promote products derived
 *     from this software without specific prior written permission.
 * 
@@ -43,7 +43,7 @@
 
 #include <ros/ros.h>
 #include <nodelet/nodelet.h>
-
+#include <jsk_topic_tools/log_utils.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
 #include <tf2_ros/buffer_client.h>
@@ -160,11 +160,13 @@ class ImageRotateNodelet : public nodelet::Nodelet
       target_vector.frame_id_ = input_frame_id;
     }
     else {
-      tf_sub_->waitForTransform(input_frame_id, target_time,
-                                source_frame_id, time,
-                                fixed_frame_id, duration);
-      tf_sub_->transformVector(input_frame_id, target_time, input_vector,
-                               fixed_frame_id, target_vector);
+      if(tf_sub_){
+	tf_sub_->waitForTransform(input_frame_id, target_time,
+				  source_frame_id, time,
+				  fixed_frame_id, duration);
+	tf_sub_->transformVector(input_frame_id, target_time, input_vector,
+				 fixed_frame_id, target_vector);
+      }
     }
   }
   
@@ -192,10 +194,10 @@ class ImageRotateNodelet : public nodelet::Nodelet
                       input_frame_id, source_vector_, source_vector_transformed,
                       ros::Duration(0.01));
 
-      // NODELET_INFO("target: %f %f %f", target_vector_.x(), target_vector_.y(), target_vector_.z());
-      // NODELET_INFO("target_transformed: %f %f %f", target_vector_transformed.x(), target_vector_transformed.y(), target_vector_transformed.z());
-      // NODELET_INFO("source: %f %f %f", source_vector_.x(), source_vector_.y(), source_vector_.z());
-      // NODELET_INFO("source_transformed: %f %f %f", source_vector_transformed.x(), source_vector_transformed.y(), source_vector_transformed.z());
+      // JSK_NODELET_INFO("target: %f %f %f", target_vector_.x(), target_vector_.y(), target_vector_.z());
+      // JSK_NODELET_INFO("target_transformed: %f %f %f", target_vector_transformed.x(), target_vector_transformed.y(), target_vector_transformed.z());
+      // JSK_NODELET_INFO("source: %f %f %f", source_vector_.x(), source_vector_.y(), source_vector_.z());
+      // JSK_NODELET_INFO("source_transformed: %f %f %f", source_vector_transformed.x(), source_vector_transformed.y(), source_vector_transformed.z());
 
       // Calculate the angle of the rotation.
       double angle = angle_;
@@ -227,12 +229,17 @@ class ImageRotateNodelet : public nodelet::Nodelet
       }
       angle_ = fmod(angle_, 2.0 * M_PI);
     }
-    catch (tf::TransformException &e)
+    catch (tf2::TransformException &e)
     {
-      NODELET_ERROR("Transform error: %s", e.what());
+      JSK_NODELET_ERROR("[%s] Transform error: %s", __PRETTY_FUNCTION__, e.what());
+    }
+    catch (...)
+    {
+      JSK_NODELET_ERROR("[%s] Transform error", __PRETTY_FUNCTION__);
     }
 
-    //NODELET_INFO("angle: %f", 180 * angle_ / M_PI);
+
+    //JSK_NODELET_INFO("angle: %f", 180 * angle_ / M_PI);
 
     // Publish the transform.
     tf::StampedTransform transform;
@@ -258,7 +265,7 @@ class ImageRotateNodelet : public nodelet::Nodelet
       int candidates[] = { noblack_dim, min_dim, max_dim, diag_dim, diag_dim }; // diag_dim repeated to simplify limit case.
       int step = config_.output_image_size;
       out_size = candidates[step] + (candidates[step + 1] - candidates[step]) * (config_.output_image_size - step);
-      //NODELET_INFO("out_size: %d", out_size);
+      //JSK_NODELET_INFO("out_size: %d", out_size);
 
       // Compute the rotation matrix.
       cv::Mat rot_matrix = cv::getRotationMatrix2D(cv::Point2f(in_image.cols / 2.0, in_image.rows / 2.0), 180 * angle_ / M_PI, 1);
@@ -277,15 +284,16 @@ class ImageRotateNodelet : public nodelet::Nodelet
     }
     catch (cv::Exception &e)
     {
-      NODELET_ERROR("Image processing error: %s %s %s %i", e.err.c_str(), e.func.c_str(), e.file.c_str(), e.line);
+      JSK_NODELET_ERROR("Image processing error: %s %s %s %i", e.err.c_str(), e.func.c_str(), e.file.c_str(), e.line);
     }
+
 
     prev_stamp_ = msg->header.stamp;
   }
 
   void subscribe()
   {
-    NODELET_DEBUG("Subscribing to image topic.");
+    JSK_NODELET_DEBUG("Subscribing to image topic.");
     if (config_.use_camera_info && config_.input_frame_id.empty())
       cam_sub_ = it_->subscribeCamera("image", 3, &ImageRotateNodelet::imageCallbackWithInfo, this);
     else
@@ -294,7 +302,7 @@ class ImageRotateNodelet : public nodelet::Nodelet
 
   void unsubscribe()
   {
-      NODELET_DEBUG("Unsubscribing from image topic.");
+      JSK_NODELET_DEBUG("Unsubscribing from image topic.");
       img_sub_.shutdown();
       cam_sub_.shutdown();
   }
@@ -333,6 +341,6 @@ public:
   }
 };
 }
+
 #include <pluginlib/class_list_macros.h>
-typedef jsk_pcl_ros::ImageRotateNodelet ImageRotateNodelet;
-PLUGINLIB_DECLARE_CLASS (jsk_pcl, ImageRotateNodelet, ImageRotateNodelet, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS (jsk_pcl_ros::ImageRotateNodelet, nodelet::Nodelet);

@@ -15,7 +15,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/o2r other materials provided
  *     with the distribution.
- *   * Neither the name of the Willow Garage nor the names of its
+ *   * Neither the name of the JSK Lab nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -41,21 +41,23 @@
 #include <ros/names.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/Marker.h>
-#include <tf/transform_listener.h>
+#include "jsk_pcl_ros/tf_listener_singleton.h"
 
 // pcl
 #include <pcl_ros/pcl_nodelet.h>
 #include <pcl/point_types.h>
-
+#include <jsk_topic_tools/connection_based_nodelet.h>
 
 namespace jsk_pcl_ros
 {
-  class VoxelGridDownsampleManager : public pcl_ros::PCLNodelet
+  class VoxelGridDownsampleManager : public jsk_topic_tools::ConnectionBasedNodelet
   {
   protected:
-    tf::TransformListener tf_listener;
+    tf::TransformListener* tf_listener;
     std::vector<visualization_msgs::Marker::ConstPtr> grid_;
     void addGrid(const visualization_msgs::Marker::ConstPtr &new_box);
+    virtual void subscribe();
+    virtual void unsubscribe();
   private:
     void pointCB(const sensor_msgs::PointCloud2ConstPtr &input);
     void clearAll();

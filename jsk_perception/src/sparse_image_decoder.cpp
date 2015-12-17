@@ -1,13 +1,15 @@
 #include <stdint.h>
 #include <boost/shared_ptr.hpp>
+#include <boost/assign.hpp>
 #include <vector>
 #include <iostream>
 
 #include <nodelet/nodelet.h>
+#include <jsk_topic_tools/log_utils.h>
 #include <image_transport/image_transport.h>
 #include <pluginlib/class_list_macros.h>
 #include <sensor_msgs/image_encodings.h>
-#include <jsk_perception/SparseImage.h>
+#include <jsk_recognition_msgs/SparseImage.h>
 
 
 namespace enc = sensor_msgs::image_encodings;
@@ -22,18 +24,17 @@ class SparseImageDecoder: public nodelet::Nodelet
 
   boost::shared_ptr<image_transport::ImageTransport> _it;
   ros::NodeHandle _nh;
-  ros::NodeHandle _ln;
   int _subscriber_count;
-  double _rate;
 
-  void imageCallback(const jsk_perception::SparseImageConstPtr& msg){
+  void imageCallback(const jsk_recognition_msgs::SparseImageConstPtr& msg){
     do_work(msg, msg->header.frame_id);
   }
 
-  void do_work(const jsk_perception::SparseImageConstPtr& msg, const std::string input_frame_from_msg){
+  void do_work(const jsk_recognition_msgs::SparseImageConstPtr& msg, const std::string input_frame_from_msg){
     try {
 
       _img_ptr->header.stamp = msg->header.stamp;
+      _img_ptr->header.frame_id = input_frame_from_msg;
       _img_ptr->width  = msg->width;
       _img_ptr->height = msg->height;
       _img_ptr->step = msg->width;
@@ -46,8 +47,9 @@ class SparseImageDecoder: public nodelet::Nodelet
       if (length <= 0) {
         useData32 = true;
         length = msg->data32.size();
+        JSK_NODELET_DEBUG("use data32 array");
       }
-
+      _img_ptr->data.resize(_img_ptr->width * _img_ptr->height);
       // decode sparse image -> image
       for (int i = 0; i < length; ++i){
         uint16_t x, y;
@@ -67,20 +69,19 @@ class SparseImageDecoder: public nodelet::Nodelet
       _img_pub.publish(*_img_ptr);
     } // end of try
     catch (...) {
-      NODELET_ERROR("making sparse image error");
+      JSK_NODELET_ERROR("making sparse image error");
     }
-
-    ros::Rate pubRate(_rate);
-    pubRate.sleep();
   } // end of do_work function
 
   void subscribe() {
-    NODELET_DEBUG("Subscribing to image topic.");
+    JSK_NODELET_DEBUG("Subscribing to image topic.");
     _spr_img_sub = _nh.subscribe("sparse_image", 3, &SparseImageDecoder::imageCallback, this);
+    ros::V_string names = boost::assign::list_of("sparse_image");
+    jsk_topic_tools::warnNoRemap(names);
   }
 
   void unsubscribe() {
-    NODELET_DEBUG("Unsubscribing from image topic.");
+    JSK_NODELET_DEBUG("Unsubscribing from image topic.");
     _spr_img_sub.shutdown();
   }
 
@@ -100,20 +101,15 @@ class SparseImageDecoder: public nodelet::Nodelet
 public:
   void onInit() {
     _nh = getNodeHandle();
-    _ln = ros::NodeHandle("~");
+    _img_ptr.reset(new sensor_msgs::Image());
     _it.reset(new image_transport::ImageTransport(_nh));
     _subscriber_count = 0;
-    image_transport::SubscriberStatusCallback connect_cb = boost::bind(&SparseImageDecoder::connectCb, this, _1);
-      image_transport::SubscriberStatusCallback disconnect_cb = boost::bind(&SparseImageDecoder::disconnectCb, this, _1);
-      _img_pub = image_transport::ImageTransport(ros::NodeHandle(_nh, "edge")).advertise("image", 1, connect_cb, disconnect_cb);
-      _img_ptr = boost::make_shared<sensor_msgs::Image>();
-
-      _ln.param("rate", _rate, 3.0);
+    image_transport::SubscriberStatusCallback connect_cb    = boost::bind(&SparseImageDecoder::connectCb, this, _1);
+    image_transport::SubscriberStatusCallback disconnect_cb = boost::bind(&SparseImageDecoder::disconnectCb, this, _1);
+    _img_pub = image_transport::ImageTransport(ros::NodeHandle(_nh, "sparse")).advertise("image_decoded", 1, connect_cb, disconnect_cb);
   } // end of onInit function
 }; // end of SparseImageDecoder class definition
 } // end of jsk_perception namespace
 
 typedef jsk_perception::SparseImageDecoder SparseImageDecoder;
 PLUGINLIB_DECLARE_CLASS (jsk_perception, SparseImageDecoder, SparseImageDecoder, nodelet::Nodelet);
-
-

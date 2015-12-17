@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/o2r other materials provided
  *     with the distribution.
- *   * Neither the name of the Willow Garage nor the names of its
+ *   * Neither the name of the JSK Lab nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -45,18 +45,25 @@
 
 namespace jsk_pcl_ros
 {
-  KeypointsPublisher::KeypointsPublisher() {};
-  KeypointsPublisher::~KeypointsPublisher() {};
-
   void KeypointsPublisher::onInit(void)
   {
-    PCLNodelet::onInit();
+    ConnectionBasedNodelet::onInit();
     
     input_.reset(new pcl::PointCloud<pcl::PointXYZ>);
-    keypoints_pub_ = pnh_->advertise<sensor_msgs::PointCloud2>("nerf_keypoints", 10);
+    keypoints_pub_ = advertise<sensor_msgs::PointCloud2>(*pnh_, "nerf_keypoints", 10);
+    
+  }
+
+  void KeypointsPublisher::subscribe()
+  {
     sub_input_ = pnh_->subscribe("input", 1, &KeypointsPublisher::inputCallback, this);
   }
 
+  void KeypointsPublisher::unsubscribe()
+  {
+    sub_input_.shutdown();
+  }
+  
   void KeypointsPublisher::inputCallback(const sensor_msgs::PointCloud2::ConstPtr& input)
   {
     pcl::fromROSMsg(*input, *input_);
@@ -71,7 +78,7 @@ namespace jsk_pcl_ros
     rip.createFromPointCloudWithFixedSize(*cloud, cloud->width, cloud->height,
 					  319.5, 239.5, 525.0, 525.0, static_cast<Eigen::Affine3f>(Eigen::Translation3f(0.0, 0.0, 0.0)));
     rip.setUnseenToMaxRange();
-    ROS_INFO_STREAM("Built range image " << rip.width << "x" << rip.height);
+    JSK_ROS_INFO_STREAM("Built range image " << rip.width << "x" << rip.height);
 
     pcl::NarfKeypoint narf;
     narf.setRangeImageBorderExtractor(&ribe);
@@ -83,7 +90,7 @@ namespace jsk_pcl_ros
     pcl::PointCloud<int> indices;
     narf.compute(indices);
 
-    PointCloud result;
+    pcl::PointCloud<pcl::PointXYZ> result;
     for (int i = 0; i < indices.size(); ++i) {
       result.push_back(cloud->at(indices[i]));
     }
@@ -94,5 +101,4 @@ namespace jsk_pcl_ros
   }
   
 }
-typedef jsk_pcl_ros::KeypointsPublisher KeypointsPublisher;
-PLUGINLIB_DECLARE_CLASS (jsk_pcl, KeypointsPublisher, KeypointsPublisher, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS (jsk_pcl_ros::KeypointsPublisher, nodelet::Nodelet);

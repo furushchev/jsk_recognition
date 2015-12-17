@@ -1,9 +1,10 @@
 #include <ros/ros.h>
+#include <jsk_topic_tools/log_utils.h>
 #include <image_transport/image_transport.h>
 #include <image_geometry/pinhole_camera_model.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
-#include <opencv/cv.h>
+#include <opencv/cv.hpp>
 #include <opencv/highgui.h>
 #include <cv_bridge/cv_bridge.h>
 
@@ -66,7 +67,7 @@ public:
       image = cv_ptr->image;
     }
     catch (cv_bridge::Exception& ex) {
-      ROS_ERROR("[virtual_camera_mono] Failed to convert image");
+      JSK_ROS_ERROR("[virtual_camera_mono] Failed to convert image");
       return;
     }
 
@@ -76,12 +77,12 @@ public:
     tf_broadcaster_.sendTransform(trans_);
 
     //
-    ROS_INFO("transform image.");
+    JSK_ROS_INFO("transform image.");
     //IplImage *outimage = cvCloneImage(image); // need to release
     cv::Mat outimage = image.clone();
     if (TransformImage(image, outimage, trans_, poly_, cam_model_)) {
       //
-      ROS_INFO("publish image and transform.");
+      JSK_ROS_INFO("publish image and transform.");
       sensor_msgs::CameraInfo virtual_info = *info_msg;
       //sensor_msgs::Image::Ptr img_msg = bridge_.cvToImgMsg(outimage, "bgr8");
       cv_ptr->image = outimage;
@@ -133,7 +134,7 @@ public:
       }
 
       // warp from (cpoint in camera) to (vpoint in virtual camera)
-      CvPoint2D32f src_pnt[4], dst_pnt[4];
+      cv::Point2f src_pnt[4], dst_pnt[4];
       for(int i = 0; i < 4; i++) {
 	cv::Point3d xyz(target_poly[i].x(),target_poly[i].y(),target_poly[i].z());
 	cv::Point3d xyz_trans(target_poly_translated[i].x(),
@@ -141,15 +142,12 @@ public:
 			      target_poly_translated[i].z());
 	cv::Point2d uv,uv_trans;
 	uv = cam_model_.project3dToPixel(xyz);
-	src_pnt[i] = cvPoint2D32f (uv.x, uv.y);
+	src_pnt[i] = cv::Point (uv.x, uv.y);
 	uv_trans = cam_model_.project3dToPixel(xyz_trans);
-	dst_pnt[i] = cvPoint2D32f (uv_trans.x, uv_trans.y);
+	dst_pnt[i] = cv::Point (uv_trans.x, uv_trans.y);
       }
 
-      CvMat* map_matrix = cvCreateMat (3, 3, CV_32FC1);
-      cvGetPerspectiveTransform (src_pnt, dst_pnt, map_matrix);
-      cv::Mat map_matrix2(map_matrix);
-      
+      cv::Mat map_matrix = cv::getPerspectiveTransform (src_pnt, dst_pnt);
 
       // unrectified?
       //IplImage* rectified = cvCloneImage(src);
@@ -158,10 +156,10 @@ public:
       //cvWarpPerspective (rectified, dest, map_matrix, CV_INTER_LINEAR + CV_WARP_FILL_OUTLIERS, cvScalarAll (0));
       cv::Mat to_mat = src.clone();
       cam_model_.rectifyImage(src, to_mat);
-      cv::warpPerspective (src, dest, map_matrix2, dest.size(), cv::INTER_LINEAR);
+      cv::warpPerspective (src, dest, map_matrix, dest.size(), cv::INTER_LINEAR);
       //cvReleaseImage(&rectified);
     } catch ( std::runtime_error e ) {
-      // ROS_ERROR("%s",e.what());
+      // JSK_ROS_ERROR("%s",e.what());
       return false;
     }
     return true;

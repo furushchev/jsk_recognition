@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/o2r other materials provided
  *     with the distribution.
- *   * Neither the name of the Willow Garage nor the names of its
+ *   * Neither the name of the JSK Lab nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -37,4 +37,4 @@
 #include <pluginlib/class_list_macros.h>
 
 typedef nodelet::NodeletDEMUX<sensor_msgs::Image> NodeletImageDEMUX;
-PLUGINLIB_DECLARE_CLASS (jsk_pcl, NodeletImageDEMUX, NodeletImageDEMUX, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS (NodeletImageDEMUX, nodelet::Nodelet);

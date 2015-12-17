@@ -2,7 +2,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2013, Ryohei Ueda and JSK Lab
+ *  Copyright (c) 2013, JSK Lab
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -15,7 +15,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/o2r other materials provided
  *     with the distribution.
- *   * Neither the name of the Willow Garage nor the names of its
+ *   * Neither the name of the JSK Lab nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -40,63 +40,78 @@
 
 #include <pcl/point_types.h>
 #include <pcl_ros/pcl_nodelet.h>
-
+#include <jsk_recognition_msgs/PolygonArray.h>
+#include <geometry_msgs/PolygonStamped.h>
+#include <geometry_msgs/PoseArray.h>
+#include <jsk_recognition_msgs/ModelCoefficientsArray.h>
 #include "jsk_pcl_ros/CallSnapIt.h"
 #include <tf/transform_listener.h>
-
+#include <jsk_topic_tools/diagnostic_nodelet.h>
+#include "jsk_pcl_ros/geo_util.h"
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/synchronizer.h>
+#include <jsk_pcl_ros/SnapFootstep.h>
+#include "jsk_pcl_ros/tf_listener_singleton.h"
 namespace jsk_pcl_ros
 {
-  class SnapIt: public pcl_ros::PCLNodelet
+  class SnapIt: public jsk_topic_tools::DiagnosticNodelet
   {
   public:
-    SnapIt();
-    virtual ~SnapIt();
-    virtual void onInit();
-  protected:
-    typedef std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > EigenVector3fVector;
-    virtual void inputCallback(const sensor_msgs::PointCloud2::ConstPtr& input);
-    virtual bool snapitCallback(jsk_pcl_ros::CallSnapIt::Request& req,
-                                jsk_pcl_ros::CallSnapIt::Response& res);
-    virtual bool processModelPlane(jsk_pcl_ros::CallSnapIt::Request& req,
-                                   jsk_pcl_ros::CallSnapIt::Response& res);
-    virtual bool processModelCylinder(jsk_pcl_ros::CallSnapIt::Request& req,
-                                      jsk_pcl_ros::CallSnapIt::Response& res);
-    virtual bool extractPointsInsidePlanePole(geometry_msgs::PolygonStamped target_plane,
-                                              pcl::PointIndices::Ptr inliers,
-                                              EigenVector3fVector& points,
-                                              Eigen::Vector3f &n,
-                                              Eigen::Vector3f &p);
-    virtual double distanceAlongWithLine(const Eigen::Vector4f& point, const Eigen::Vector4f& center, const Eigen::Vector4f direction);
-    virtual void extractPlanePoints(pcl::PointCloud<pcl::PointXYZ>::Ptr input, pcl::PointIndices::Ptr out_inliers,
-                                    pcl::ModelCoefficients::Ptr out_coefficients,
-                                    Eigen::Vector3f normal,
-                                    double eps_angle);
-    virtual bool extractPointsInsideCylinder(const geometry_msgs::PointStamped& center,
-                                             const geometry_msgs::Vector3Stamped direction,
-                                             const double radius,
-                                             const double height,
-                                             pcl::PointIndices::Ptr inliers,
-                                             Eigen::Vector3f &n,
-                                             Eigen::Vector3f &C_orig,
-                                             const double fat_factor);
-    virtual bool checkPointInsidePlane(EigenVector3fVector &plane_points,
-                                       Eigen::Vector3f normal,
-                                       Eigen::Vector3f point);
-    virtual void publishPointCloud(ros::Publisher pub, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
-    virtual void publishConvexHullMarker(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull);
+    typedef message_filters::sync_policies::ExactTime<
+      jsk_recognition_msgs::PolygonArray,
+      jsk_recognition_msgs::ModelCoefficientsArray> SyncPolygonPolicy;
+    SnapIt(): DiagnosticNodelet("SnapIt") {}
     
-    ros::Subscriber sub_input_;
-    ros::Publisher debug_candidate_points_pub_;
-    ros::Publisher debug_candidate_points_pub2_;
-    ros::Publisher debug_candidate_points_pub3_;
-    ros::Publisher debug_centroid_pub_;
-    ros::Publisher marker_pub_;
-    ros::Publisher debug_centroid_after_trans_pub_;
-    ros::ServiceServer call_snapit_srv_;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr input_;
-    boost::shared_ptr<tf::TransformListener> tf_listener_;
-    std_msgs::Header input_header_;
-    std::string input_frame_id_;
+  protected:
+    ////////////////////////////////////////////////////////
+    // methods
+    ////////////////////////////////////////////////////////
+    virtual void onInit();
+    virtual void subscribe();
+    virtual void unsubscribe();
+    virtual void polygonCallback(
+      const jsk_recognition_msgs::PolygonArray::ConstPtr& polygon_msg,
+      const jsk_recognition_msgs::ModelCoefficientsArray::ConstPtr& coefficients_msg);
+    virtual void polygonAlignCallback(
+      const geometry_msgs::PoseStamped::ConstPtr& pose_msg);
+    virtual void convexAlignCallback(
+      const geometry_msgs::PoseStamped::ConstPtr& pose_msg);
+    virtual void convexAlignPolygonCallback(
+      const geometry_msgs::PolygonStamped::ConstPtr& poly_msg);
+    virtual std::vector<ConvexPolygon::Ptr> createConvexes(
+      const std::string& frame_id, const ros::Time& stamp,
+      jsk_recognition_msgs::PolygonArray::ConstPtr polygons);
+    virtual int findNearestConvex(
+      const Eigen::Vector3f& pose_point, 
+      const std::vector<ConvexPolygon::Ptr>& convexes);
+    virtual geometry_msgs::PoseStamped alignPose(
+      Eigen::Affine3f& pose, ConvexPolygon::Ptr convex);
+    virtual bool footstepAlignServiceCallback(
+      jsk_pcl_ros::SnapFootstep::Request& req,
+      jsk_pcl_ros::SnapFootstep::Response& res);
+    ////////////////////////////////////////////////////////
+    // ROS variables
+    ////////////////////////////////////////////////////////
+    tf::TransformListener* tf_listener_;
+    message_filters::Subscriber<jsk_recognition_msgs::PolygonArray> sub_polygons_;
+    message_filters::Subscriber<jsk_recognition_msgs::ModelCoefficientsArray> sub_coefficients_;
+    boost::shared_ptr<message_filters::Synchronizer<SyncPolygonPolicy> >sync_polygon_;
+    ros::Publisher polygon_aligned_pub_;
+    ros::Publisher convex_aligned_pub_;
+    ros::Publisher convex_aligned_pose_array_pub_;
+    ros::Publisher convex_aligned_pose_array_marker_pub_;
+    ros::Subscriber polygon_align_sub_;
+    ros::Subscriber convex_align_sub_;
+    ros::Subscriber convex_align_polygon_sub_;
+    bool use_service_;
+    ros::ServiceServer align_footstep_srv_;
+    jsk_recognition_msgs::PolygonArray::ConstPtr polygons_;
+    boost::mutex mutex_;
+    ////////////////////////////////////////////////////////
+    // parameters
+    ////////////////////////////////////////////////////////
+    
   };
 }
 
