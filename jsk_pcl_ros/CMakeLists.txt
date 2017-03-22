@@ -76,6 +76,7 @@ generate_dynamic_reconfigure_options(
   cfg/HintedStickFinder.cfg
   cfg/HintedPlaneDetector.cfg
   cfg/PeopleDetection.cfg
+  cfg/CylinderFinder.cfg
   cfg/TorusFinder.cfg
   cfg/NormalDirectionFilter.cfg
   cfg/RegionGrowingMultiplePlaneSegmentation.cfg
@@ -315,6 +316,7 @@ jsk_pcl_nodelet(src/add_color_from_image_nodelet.cpp
 jsk_pcl_nodelet(src/add_color_from_image_to_organized_nodelet.cpp
   "jsk_pcl/AddColorFromImageToOrganized" "add_color_from_image_to_organized")
 jsk_pcl_nodelet(src/torus_finder_nodelet.cpp "jsk_pcl/TorusFinder" "torus_finder")
+jsk_pcl_nodelet(src/cylinder_finder_nodelet.cpp "jsk_pcl/CylinderFinder" "cylinder_finder")
 jsk_pcl_nodelet(src/mask_image_filter_nodelet.cpp
   "jsk_pcl/MaskImageFilter" "mask_image_filter")
 jsk_pcl_nodelet(src/mask_image_cluster_filter_nodelet.cpp

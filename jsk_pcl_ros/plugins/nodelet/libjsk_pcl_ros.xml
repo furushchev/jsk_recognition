@@ -39,6 +39,10 @@
          type="jsk_pcl_ros::HintedHandleEstimator"
          base_class_type="nodelet::Nodelet">
   </class>
+  <class name="jsk_pcl/CylinderFinder"
+         type="jsk_pcl_ros::CylinderFinder"
+         base_class_type="nodelet::Nodelet">
+  </class>
   <class name="jsk_pcl/TorusFinder"
          type="jsk_pcl_ros::TorusFinder"
          base_class_type="nodelet::Nodelet">
