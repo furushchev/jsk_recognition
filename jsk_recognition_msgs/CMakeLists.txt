@@ -15,6 +15,8 @@ add_message_files(
   ClusterPointIndices.msg
   ColorHistogramArray.msg
   ColorHistogram.msg
+  Cylinder.msg
+  CylinderArray.msg
   DepthCalibrationParameter.msg
   DepthErrorResult.msg
   HeightmapConfig.msg
