@@ -47,16 +47,16 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/extract_indices.h>
 
 
 namespace jsk_pcl_ros
 {
   void CylinderFinder::onInit()
   {
-    ConnectionBasedNodelet::onInit();
-    pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+    DiagnosticNodelet::onInit();
+    pcl::console::setVerbosityLevel(pcl::console::L_WARN);
 
-    pnh_->param("use_normal", use_normal_, false);
     pnh_->param("use_hint", use_hint_, false);
     if (use_hint_) {
       if (pnh_->hasParam("initial_axis_hint")) {
@@ -74,12 +74,11 @@ namespace jsk_pcl_ros
         }
       }
     }
-/*
+
     srv_ = boost::make_shared <dynamic_reconfigure::Server<Config> > (*pnh_);
     typename dynamic_reconfigure::Server<Config>::CallbackType f =
-      boost::bind (&TorusFinder::configCallback, this, _1, _2);
+      boost::bind (&CylinderFinder::configCallback, this, _1, _2);
     srv_->setCallback (f);
-*/
 
     pub_cylinder_ = advertise<jsk_recognition_msgs::Cylinder>(*pnh_, "output", 1);
     pub_cylinder_array_ = advertise<jsk_recognition_msgs::CylinderArray>(*pnh_, "output/array", 1);
@@ -95,6 +94,7 @@ namespace jsk_pcl_ros
   void CylinderFinder::configCallback(Config &config, uint32_t level)
   {
     boost::mutex::scoped_lock lock(mutex_);
+
     min_radius_ = config.min_radius;
     max_radius_ = config.max_radius;
     outlier_threshold_ = config.outlier_threshold;
@@ -108,16 +108,16 @@ namespace jsk_pcl_ros
   {
     sub_cloud_ = pnh_->subscribe("input", 1,
                                  &CylinderFinder::segment, this);
-    sub_points_ = pnh_->subscribe("input/polygon", 1,
-                                  &CylinderFinder::segmentFromPoints, this);
+    // sub_points_ = pnh_->subscribe("input/polygon", 1,
+    //                               &CylinderFinder::segmentFromPoints, this);
   }
 
   void CylinderFinder::unsubscribe()
   {
     sub_cloud_.shutdown();
-    sub_points_.shutdown();
+    // sub_points_.shutdown();
   }
-
+  /*
   void CylinderFinder::segmentFromPoints(const geometry_msgs::PolygonStamped::ConstPtr& msg)
   {
     // convenience callback for polygon
@@ -136,24 +136,24 @@ namespace jsk_pcl_ros
     ros_cloud.header = msg->header;
     segment(boost::make_shared<sensor_msgs::PointCloud2>(ros_cloud));
   }
-
+  */
   void CylinderFinder::segment(const sensor_msgs::PointCloud2::ConstPtr& msg)
   {
     boost::mutex::scoped_lock lock(mutex_);
+    vital_checker_->poke();
 
-    pcl::PointCloud<pcl::PointNormal>::Ptr cloud(new pcl::PointCloud<pcl::PointNormal>);
-    pcl::fromROSMsg(*msg, *cloud);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::fromROSMsg(*msg, *cloud_xyz);
 
-    pcl::SACSegmentation<pcl::PointNormal> seg;
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normal(new pcl::PointCloud<pcl::PointNormal>);
+    pcl::fromROSMsg(*msg, *cloud_normal);
+ 
+    pcl::SACSegmentationFromNormals<pcl::PointXYZ, pcl::PointNormal> seg;
 
-    if (use_normal_) {
-      pcl::SACSegmentationFromNormals<pcl::PointNormal, pcl::PointNormal> seg_normal;
-      seg_normal.setInputNormals(cloud);
-      seg = seg_normal;
-    }
-
+    seg.setModelType(pcl::SACMODEL_CYLINDER);
     seg.setOptimizeCoefficients (true);
-    seg.setInputCloud(cloud);
+    seg.setInputCloud(cloud_xyz);
+    seg.setInputNormals(cloud_normal);
     seg.setRadiusLimits(min_radius_, max_radius_);
 
     if (algorithm_ == "RANSAC") {
@@ -177,10 +177,13 @@ namespace jsk_pcl_ros
     else if (algorithm_ == "PROSAC") {
       seg.setMethodType(pcl::SAC_PROSAC);
     }
+    else {
+      NODELET_ERROR("No algorithm specified. Use RANSAC");
+      seg.setMethodType(pcl::SAC_RANSAC);
+    }
 
     seg.setDistanceThreshold (outlier_threshold_);
     seg.setMaxIterations (max_iterations_);
-    seg.setModelType(pcl::SACMODEL_CYLINDER);
 
     if (use_hint_) {
       seg.setAxis(hint_axis_);
@@ -190,7 +193,17 @@ namespace jsk_pcl_ros
     pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
     seg.segment(*inliers, *coefficients);
-    NODELET_INFO("input points: %lu", cloud->points.size());
+    NODELET_INFO("input points xyz: %lu, normal: %lu",
+                 cloud_xyz->points.size(), cloud_normal->points.size());
+
+    // compute center point and cylinder height
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cylinder (new pcl::PointCloud<pcl::PointXYZ>);
+    extract.setInputCloud(cloud_xyz);
+    extract.setIndices(inliers);
+    extract.filter(*cloud_cylinder);
+
+
     if (inliers->indices.size() > min_size_) {
 
       // publish inliers

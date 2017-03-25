@@ -47,33 +47,33 @@
 #include <dynamic_reconfigure/server.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <jsk_topic_tools/connection_based_nodelet.h>
+#include <jsk_topic_tools/diagnostic_nodelet.h>
 #include <jsk_pcl_ros/CylinderFinderConfig.h>
 #include <jsk_recognition_msgs/Cylinder.h>
 #include <jsk_recognition_msgs/CylinderArray.h>
-//#include <jsk_recognition_utils/time_util.h>
 #include <sensor_msgs/PointCloud2.h>
 
 
 namespace jsk_pcl_ros
 {
-  class CylinderFinder: public jsk_topic_tools::ConnectionBasedNodelet
+  class CylinderFinder: public jsk_topic_tools::DiagnosticNodelet
   {
   public:
     typedef CylinderFinderConfig Config;
+    CylinderFinder() : DiagnosticNodelet("CylinderFinder"){}
   protected:
     virtual void onInit();
     virtual void configCallback(Config &config, uint32_t level);
     virtual void subscribe();
     virtual void unsubscribe();
     virtual void segment(const sensor_msgs::PointCloud2::ConstPtr& msg);
-    virtual void segmentFromPoints(const geometry_msgs::PolygonStamped::ConstPtr& msg);
+    // virtual void segmentFromPoints(const geometry_msgs::PolygonStamped::ConstPtr& msg);
 
     boost::mutex mutex_;
     Eigen::Vector3f hint_axis_;
     boost::shared_ptr<dynamic_reconfigure::Server<Config> > srv_;
     ros::Subscriber sub_cloud_;
-    ros::Subscriber sub_points_;
+    // ros::Subscriber sub_points_;
     ros::Publisher pub_cylinder_;
     ros::Publisher pub_cylinder_array_;
     ros::Publisher pub_cylinder_with_failure_;
@@ -88,7 +88,6 @@ namespace jsk_pcl_ros
     double eps_hint_angle_;
     double outlier_threshold_;
     bool use_hint_;
-    bool use_normal_;
     int max_iterations_;
     int min_size_;
   };
