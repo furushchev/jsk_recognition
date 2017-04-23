@@ -49,6 +49,10 @@ Finds objects similar to a selected object as reference based on bhattacharyya d
   - 2: VALUE
   - 3: HUE AND SATURATION
 
+- `skip_compare` (Bool, default: `False`):
+
+  If `True`, skip compare to reference clouds, only publish histograms of input clouds.
+
 ## Sample
 
 ``` 
