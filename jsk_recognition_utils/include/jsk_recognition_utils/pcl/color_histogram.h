@@ -20,10 +20,10 @@ namespace jsk_recognition_utils {
   };
 
   enum ComparePolicy {
-    COSINE = 0,
+    INNER_PRODUCT = 0,
+    BHATTACHARYYA,
     INTERSECTION,
-    KL_DIVERGENCE,
-    BATTA
+    KL_DIVERGENCE
   };
 
   inline int
@@ -90,6 +90,60 @@ namespace jsk_recognition_utils {
         output[out_index] = input[index];
       }
   }
+
+  inline double
+  compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
+                   const jsk_recognition_msgs::ColorHistogram &reference,
+                   const double rotate_degree=0.0,
+                   const ComparePolicy policy=KL_DIVERGENCE,
+                   const int& h_bin_step=10, const int& s_bin_step=10)
+  {
+    if (input.histogram.size() != h_bin_step * s_bin_step ||
+        reference.histogram.size() != h_bin_step * s_bin_step) {
+      ROS_ERROR("Mismatch histogram length");
+      return -1.0;
+    }
+
+    double distance = 0.0;
+    switch (policy) {
+    case INNER_PRODUCT:
+      for (size_t i = 0; i < input.histogram.size(); ++i) {
+        distance += input.histogram[i] * reference.histogram[i];
+      }
+      break;
+    case BHATTACHARYYA:
+      for (size_t i = 0; i < input.histogram.size(); ++i) {
+        distance += std::sqrt(input.histogram[i] * reference.histogram[i]);
+      }
+      break;
+    case INTERSECTION:
+      for (size_t i = 0; i < input.histogram.size(); ++i) {
+        distance += std::min(input.histogram[i], reference.histogram[i]);
+      }
+      break;
+    case KL_DIVERGENCE:
+    default:
+      for (size_t i = 0; i < input.histogram.size(); ++i) {
+        distance += input.histogram[i] * std::log((input.histogram[i] + 1e-9) / (reference.histogram[i] + 1e-9));
+      }
+      distance = std::exp(-1.0 * distance / 3.0);
+      break;
+    }
+    return distance;
+  }
+
+  inline double
+  compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
+                   const jsk_recognition_msgs::ColorHistogram &reference,
+                   const ComparePolicy policy=KL_DIVERGENCE,
+                   const int& h_bin_step=10, const int& s_bin_step=10)
+  {
+    double degree = 20.0;
+    return std::min(compareHistogram(input, reference, degree, policy, h_bin_step, s_bin_step),
+                    std::min(compareHistogram(input, reference,   0.0, policy, h_bin_step, s_bin_step),
+                             compareHistogram(input, reference, -degree, policy, h_bin_step, s_bin_step)));
+  }
+
 }
 
 #endif // COLOR_HISTOGRAM_H__

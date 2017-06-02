@@ -74,6 +74,7 @@ generate_dynamic_reconfigure_options(
   cfg/ClusterPointIndicesToPointIndices.cfg
   cfg/ColorizeDistanceFromPlane.cfg
   cfg/ColorHistogram.cfg
+  cfg/ColorHistogramFilter.cfg
   cfg/DelayPointCloud.cfg
   cfg/MaskImageToDepthConsideredMaskImage.cfg
   cfg/PlanarPointCloudSimulator.cfg
@@ -114,6 +115,7 @@ jsk_pcl_util_nodelet(src/normal_flip_to_frame_nodelet.cpp "jsk_pcl_utils/NormalF
   "normal_flip_to_frame")
 jsk_pcl_util_nodelet(src/centroid_publisher_nodelet.cpp "jsk_pcl_utils/CentroidPublisher" "centroid_publisher")
 jsk_pcl_util_nodelet(src/color_histogram_nodelet.cpp "jsk_pcl_utils/ColorHistogram" "color_histogram")
+jsk_pcl_util_nodelet(src/color_histogram_filter_nodelet.cpp "jsk_pcl_utils/ColorHistogramFilter" "color_histogram_filter")
 jsk_pcl_util_nodelet(src/cloud_on_plane_nodelet.cpp "jsk_pcl/CloudOnPlane"
   "cloud_on_plane")
 jsk_pcl_util_nodelet(src/tf_transform_cloud_nodelet.cpp

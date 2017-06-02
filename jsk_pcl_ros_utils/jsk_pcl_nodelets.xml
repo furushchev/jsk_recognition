@@ -105,6 +105,18 @@
       colorize pointcloud according to the distance from the nearest plane
     </description>
   </class>
+  <class name="jsk_pcl_utils/ColorHistogram" type="jsk_pcl_ros_utils::ColorHistogram"
+         base_class_type="nodelet::Nodelet">
+    <description>
+      Compute histogram for each point indices
+    </description>
+  </class>
+  <class name="jsk_pcl_utils/ColorHistogramFilter" type="jsk_pcl_ros_utils::ColorHistogramFilter"
+         base_class_type="nodelet::Nodelet">
+    <description>
+      Filter point indices using color histogram
+    </description>
+  </class>
   <class name="jsk_pcl_utils/ColorizeHeight2DMapping" type="jsk_pcl_ros_utils::ColorizeHeight2DMapping"
          base_class_type="nodelet::Nodelet">
     <description>
