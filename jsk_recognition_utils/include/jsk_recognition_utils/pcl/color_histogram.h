@@ -40,31 +40,36 @@ namespace jsk_recognition_utils {
   computeColorHistogram(const pcl::PointCloud<pcl::PointXYZHSV>& cloud,
                         std::vector<float>& histogram,
                         const HistogramPolicy policy=HUE_AND_SATURATION,
-                        const int& h_bin_step=10, const int& s_bin_step=10)
+                        const bin_size=10)
   {
-    int bin_size = h_bin_step * s_bin_step;
-    if (policy == HUE) bin_size = h_bin_step;
-    else if (policy == SATURATION) bin_size = s_bin_step;
+    if (policy == HUE_AND_SATURATION) {
+      std::vector<float> saturation;
+      computeColorHistogram(cloud, histogram, HUE, bin_size);
+      computeColorHistogram(cloud, saturation, SATURATION, bin_size);
+      histogram.insert(histogram.end(), saturation.begin(), saturation.end());
+      return;
+    }
 
-    histogram.resize(bin_size, 0.0f);
+    histogram.resize(bin_size, 0.0);
 
     // histogram
     for (size_t i = 0; i < cloud.points.size(); ++i)
     {
       pcl::PointXYZHSV p = cloud.points[i];
-      int h_bin = getBin(p.h, h_bin_step, 0.0, 360.0);
-      int s_bin = getBin(p.s, s_bin_step, 0.0, 1.0);
+      int h_bin = getBin(p.h, bin_size, 0.0, 360.0);
+      int s_bin = getBin(p.s, bin_size, 0.0, 1.0);
 
-      int index = h_bin_step * s_bin + h_bin;
-      if (policy == HUE) index = h_bin;
-      else if (policy == SATURATION) index = s_bin;
-      histogram[index] += 1.0f;
+      int index = 0;
+      if (policy == HUE) histogram[h_bin] += 1.0f;
+      else if (policy == SATURATION) histogram[s_bin] += 1.0f;
     }
 
     // normalization
     double sum = 0.0;
+
     for (size_t i = 0; i < histogram.size(); ++i)
       sum += histogram[i];
+
     if (sum != 0.0) {
       for (size_t i = 0; i < histogram.size(); ++i) {
         histogram[i] /= sum;
