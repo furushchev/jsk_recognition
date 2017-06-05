@@ -1,10 +1,44 @@
+// -*- mode: C++ -*-
+/*********************************************************************
+ * Software License Agreement (BSD License)
+ *
+ *  Copyright (c) 2017, JSK Lab
+ *  All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *   * Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the following
+ *     disclaimer in the documentation and/o2r other materials provided
+ *     with the distribution.
+ *   * Neither the name of the JSK Lab nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ *********************************************************************/
 /*
  * color_histogram.h
  * Author: Yuki Furuta <furushchev@jsk.imi.i.u-tokyo.ac.jp>
  */
 
-#ifndef COLOR_HISTOGRAM_H__
-#define COLOR_HISTOGRAM_H__
+#ifndef JSK_RECOGNITION_UTILS_COLOR_HISTOGRAM_H__
+#define JSK_RECOGNITION_UTILS_COLOR_HISTOGRAM_H__
 
 #include <algorithm>
 #include <iterator>
@@ -40,7 +74,7 @@ namespace jsk_recognition_utils {
   computeColorHistogram(const pcl::PointCloud<pcl::PointXYZHSV>& cloud,
                         std::vector<float>& histogram,
                         const HistogramPolicy policy=HUE_AND_SATURATION,
-                        const bin_size=10)
+                        const int bin_size=10)
   {
     if (policy == HUE_AND_SATURATION) {
       std::vector<float> saturation;
@@ -80,32 +114,34 @@ namespace jsk_recognition_utils {
   inline void
   rotateHistogramByHue(const std::vector<float>&input,
                        std::vector<float>& output,
-                       double degree,
-                       const int& h_bin_step=10, const int& s_bin_step=10)
+                       const double degree=20.0,
+                       const int bin_size=10)
   {
-    int base_offset = std::floor(degree / 360.0 * h_bin_step);
+    int offset = std::floor(degree / 360.0 * bin_size);
     output.resize(input.size(), 0.0);
 
-    for (size_t h = 0; h < h_bin_step; ++h)
-      for (size_t s = 0; s < s_bin_step; ++s)
-      {
-        int offset = h + base_offset > h_bin_step ? h + base_offset - h_bin_step : h + base_offset;
-        int index = h_bin_step * s + h;
-        int out_index = h_bin_step * s + h + offset;
-        output[out_index] = input[index];
+    for (size_t h = 0; h < bin_size; ++h) {
+      int hout = h + offset >= bin_size ? h + offset - bin_size : h + offset;
+      output[hout] = input[h];
+    }
+
+    if (input.size() > bin_size) {
+      // copy saturation
+      for (size_t s = bin_size; s < bin_size * 2; ++s) {
+        output[s] = input[s];
       }
+    }
   }
 
   inline double
   compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
                    const jsk_recognition_msgs::ColorHistogram &reference,
                    const double rotate_degree=0.0,
-                   const ComparePolicy policy=KL_DIVERGENCE,
-                   const int& h_bin_step=10, const int& s_bin_step=10)
+                   const int bin_size=10,
+                   const ComparePolicy policy=KL_DIVERGENCE)
   {
-    if (input.histogram.size() != h_bin_step * s_bin_step ||
-        reference.histogram.size() != h_bin_step * s_bin_step) {
-      ROS_ERROR("Mismatch histogram length");
+    if (input.histogram.size() != reference.histogram.size()) {
+      ROS_ERROR("Mismatch histogram bin size");
       return -1.0;
     }
 
@@ -140,15 +176,15 @@ namespace jsk_recognition_utils {
   inline double
   compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
                    const jsk_recognition_msgs::ColorHistogram &reference,
-                   const ComparePolicy policy=KL_DIVERGENCE,
-                   const int& h_bin_step=10, const int& s_bin_step=10)
+                   const int bin_size=10,
+                   const ComparePolicy policy=KL_DIVERGENCE)
   {
     double degree = 20.0;
-    return std::min(compareHistogram(input, reference, degree, policy, h_bin_step, s_bin_step),
-                    std::min(compareHistogram(input, reference,   0.0, policy, h_bin_step, s_bin_step),
-                             compareHistogram(input, reference, -degree, policy, h_bin_step, s_bin_step)));
+    double dcw  = compareHistogram(input, reference, degree, bin_size, policy);
+    double d0   = compareHistogram(input, reference, 0.0, bin_size, policy);
+    double dccw = compareHistogram(input, reference, -degree, bin_size, policy);
+    return std::min(dcw, std::min(d0, dccw));
   }
-
 }
 
-#endif // COLOR_HISTOGRAM_H__
+#endif // JSK_RECOGNITION_UTILS_COLOR_HISTOGRAM_H__
