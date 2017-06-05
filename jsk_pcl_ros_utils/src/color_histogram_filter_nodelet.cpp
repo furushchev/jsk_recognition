@@ -60,9 +60,8 @@ namespace jsk_pcl_ros_utils
   void ColorHistogramFilter::configCallback(Config &config, uint32_t level)
   {
     boost::mutex::scoped_lock lock(mutex_);
-    h_bin_size_ = config.h_bin_size;
-    s_bin_size_ = config.s_bin_size;
     compare_policy_ = jsk_recognition_utils::ComparePolicy(config.compare_policy);
+    bin_size_ = config.bin_size;
     distance_threshold_ = config.distance_threshold;
     if (queue_size_ = config.queue_size) {
       queue_size_ = config.queue_size;
@@ -111,8 +110,7 @@ namespace jsk_pcl_ros_utils
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
       double distance = jsk_recognition_utils::compareHistogram(
         input_histogram->histograms[i], reference_histogram_,
-        compare_policy_,
-        h_bin_size_, s_bin_size_);
+        bin_size_, compare_policy_);
       ROS_DEBUG_STREAM("\t" << i << ": " << distance);
       if (distance_threshold_ > distance) {
         out_hist.histograms.push_back(input_histogram->histograms[i]);

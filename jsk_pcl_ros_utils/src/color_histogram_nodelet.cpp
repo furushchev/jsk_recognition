@@ -57,8 +57,7 @@ namespace jsk_pcl_ros_utils
   void ColorHistogram::configCallback(Config& config, uint32_t level)
   {
     boost::mutex::scoped_lock lock(mutex_);
-    h_bin_size_ = config.h_bin_size;
-    s_bin_size_ = config.s_bin_size;
+    bin_size_ = config.bin_size;
     histogram_policy_ = jsk_recognition_utils::HistogramPolicy(config.histogram_policy);
     if (queue_size_ != config.queue_size) {
       queue_size_ = config.queue_size;
@@ -117,7 +116,7 @@ namespace jsk_pcl_ros_utils
       jsk_recognition_utils::computeColorHistogram(segmented_cloud,
                                                    histogram_array.histograms[i].histogram,
                                                    histogram_policy_,
-                                                   h_bin_size_, s_bin_size_);
+                                                   bin_size_);
     }
     pub_histogram_.publish(histogram_array);
   }

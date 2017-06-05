@@ -83,7 +83,7 @@ namespace jsk_pcl_ros_utils
 
     // parameters
     int queue_size_;
-    int h_bin_size_, s_bin_size_;
+    int bin_size_;
     double distance_threshold_;
     jsk_recognition_utils::ComparePolicy compare_policy_;
     jsk_recognition_msgs::ColorHistogram reference_histogram_;

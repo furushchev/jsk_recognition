@@ -84,7 +84,7 @@ namespace jsk_pcl_ros_utils
 
     // parameters
     int queue_size_;
-    int h_bin_size_, s_bin_size_;
+    int bin_size_;
     jsk_recognition_utils::HistogramPolicy histogram_policy_;
   };
 }
