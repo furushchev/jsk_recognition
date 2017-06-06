@@ -76,15 +76,8 @@ namespace jsk_recognition_utils {
                         const HistogramPolicy policy=HUE_AND_SATURATION,
                         const int bin_size=10)
   {
-    if (policy == HUE_AND_SATURATION) {
-      std::vector<float> saturation;
-      computeColorHistogram(cloud, histogram, HUE, bin_size);
-      computeColorHistogram(cloud, saturation, SATURATION, bin_size);
-      histogram.insert(histogram.end(), saturation.begin(), saturation.end());
-      return;
-    }
-
-    histogram.resize(bin_size, 0.0);
+    if (policy == HUE_AND_SATURATION) histogram.resize(bin_size * bin_size, 0.0f);
+    else histogram.resize(bin_size, 0.0f);
 
     // histogram
     for (size_t i = 0; i < cloud.points.size(); ++i)
@@ -93,9 +86,9 @@ namespace jsk_recognition_utils {
       int h_bin = getBin(p.h, bin_size, 0.0, 360.0);
       int s_bin = getBin(p.s, bin_size, 0.0, 1.0);
 
-      int index = 0;
       if (policy == HUE) histogram[h_bin] += 1.0f;
       else if (policy == SATURATION) histogram[s_bin] += 1.0f;
+      else histogram[s_bin * bin_size + h_bin] += 1.0f;
     }
 
     // normalization
