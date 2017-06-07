@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 # Copyright: Yuki Furuta <furushchev@jsk.imi.i.u-tokyo.ac.jp>
 
+<<<<<<< HEAD
 import math
+=======
+>>>>>>> furushchev/color-histogram-working
 import cv2
 from cv_bridge import CvBridge
 import numpy as np
