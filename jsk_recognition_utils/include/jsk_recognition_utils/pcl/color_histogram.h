@@ -126,6 +126,38 @@ namespace jsk_recognition_utils {
     }
   }
 
+  inline void
+  rotateHistogram(const std::vector<float>& input,
+                  std::vector<float>& output,
+                  const double degree=20.0,
+                  const int bin_size=10)
+  {
+    int offset = std::floor(degree / 360.0 * bin_size);
+    bool hue_and_saturation = false;
+    if (input.size() == bin_size * bin_size)
+      hue_and_saturation = true;
+    else if (input.size() != bin_size) {
+      ROS_ERROR("invalid histogram size");
+      return;
+    }
+
+    output.resize(input.size(), 0.0f);
+
+    if (hue_and_saturation) {
+      for (size_t s = 0; s < bin_size; ++s) {
+        for (size_t h = 0; h < bin_size; ++h) {
+          int h_out = h + offset % bin_size;
+          output[s * bin_size + h_out] = input[s * bin_size + h];
+        }
+      }
+    } else {
+      for (size_t h = 0; h < bin_size; ++h) {
+        int h_out = h + offset % bin_size;
+        output[h_out] = input[h];
+      }
+    }
+  }
+
   inline double
   compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
                    const jsk_recognition_msgs::ColorHistogram &reference,
@@ -138,27 +170,30 @@ namespace jsk_recognition_utils {
       return -1.0;
     }
 
+    std::vector<float> rotated;
+    rotateHistogram(input.histogram, rotated, rotate_degree, bin_size);
+
     double distance = 0.0;
     switch (policy) {
     case INNER_PRODUCT:
-      for (size_t i = 0; i < input.histogram.size(); ++i) {
-        distance += input.histogram[i] * reference.histogram[i];
+      for (size_t i = 0; i < rotated.size(); ++i) {
+        distance += rotated[i] * reference.histogram[i];
       }
       break;
     case BHATTACHARYYA:
-      for (size_t i = 0; i < input.histogram.size(); ++i) {
-        distance += std::sqrt(input.histogram[i] * reference.histogram[i]);
+      for (size_t i = 0; i < rotated.size(); ++i) {
+        distance += std::sqrt(rotated[i] * reference.histogram[i]);
       }
       break;
     case INTERSECTION:
-      for (size_t i = 0; i < input.histogram.size(); ++i) {
-        distance += std::min(input.histogram[i], reference.histogram[i]);
+      for (size_t i = 0; i < rotated.size(); ++i) {
+        distance += std::min(rotated[i], reference.histogram[i]);
       }
       break;
     case KL_DIVERGENCE:
     default:
-      for (size_t i = 0; i < input.histogram.size(); ++i) {
-        distance += input.histogram[i] * std::log((input.histogram[i] + 1e-9) / (reference.histogram[i] + 1e-9));
+      for (size_t i = 0; i < rotated.size(); ++i) {
+        distance += rotated[i] * std::log((rotated[i] + 1e-9) / (reference.histogram[i] + 1e-9));
       }
       distance = std::exp(-1.0 * distance / 3.0);
       break;
