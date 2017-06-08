@@ -7,6 +7,8 @@ import cv2
 from cv_bridge import CvBridge
 from dynamic_reconfigure.server import Server
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import rospy
 from jsk_topic_tools import ConnectionBasedTransport
@@ -28,8 +30,6 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
 
         self.cv_bridge = CvBridge()
         self.hsv_color_map = plt.cm.get_cmap('hsv')
-        self.figure = plt.figure()
-        self.plot = self.figure.add_subplot(111)
         self.hsv_color_map_2d = self.get_hsv_color_map_2d()
 
         self.pub_image = self.advertise("~output", Image, queue_size=1)
@@ -38,10 +38,13 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         self.histogram_policy = config.histogram_policy
         self.histogram_index = config.histogram_index
         self.histogram_scale = config.histogram_scale
+        return config
 
     def subscribe(self):
-        self.sub_histogram = rospy.Subscriber("~input", ColorHistogram, self.callback)
-        self.sub_histogram_array = rospy.Subscriber("~input/array", ColorHistogramArray, self.callback_array)
+        self.sub_histogram = rospy.Subscriber("~input", ColorHistogram,
+                                              self.callback, queue_size=1)
+        self.sub_histogram_array = rospy.Subscriber("~input/array", ColorHistogramArray,
+                                                    self.callback_array, queue_size=1)
 
     def unsubscribe(self):
         self.sub_histogram.unregister()
@@ -57,11 +60,11 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         return hsv_map
 
     def callback(self, msg):
-        if self.histogram_policy == Config.ColorHistogram_HUE:
+        if self.histogram_policy == Config.VisualizeColorHistogram_HUE:
             img = self.plot_hist_hue(msg.histogram)
-        elif self.histogram_policy == Config.ColorHistogram_SATURATION:
+        elif self.histogram_policy == Config.VisualizeColorHistogram_SATURATION:
             img = self.plot_hist_saturation(msg.histogram)
-        elif self.histogram_policy == Config.ColorHistogram_HUE_AND_SATURATION:
+        elif self.histogram_policy == Config.VisualizeColorHistogram_HUE_AND_SATURATION:
             img = self.plot_hist_hs(msg.histogram)
         else:
             rospy.logerr("Invalid histogram policy")
@@ -78,37 +81,36 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         else:
             rospy.logerr("histogram index Out-of-index")
 
-    def image_from_plot(self, plot):
-        self.figure.canvas.draw()
-        w, h = self.figure.canvas.get_width_height()
-        buf = np.fromstring(self.figure.canvas.tostring_rgb(), dtype=np.uint8)
-        buf.shape = (h, w, 3)
-        buf = np.roll(buf, 1, axis=-1)
-        return buf
+    def image_from_plot(self):
+        fig = plt.gcf()
+        fig.canvas.draw()
+        w, h = fig.canvas.get_width_height()
+        img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        fig.clf()
+        img.shape = (h, w, 3)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        return img
 
     def plot_hist_hue(self, hist):
-        self.plot.clear()
         bin_size = len(hist)
         bin_step = 360.0 / bin_size
         x = np.arange(360.0, step=bin_step)
-        bars = self.plot.bar(x, hist, width=bin_step)
+        bars = plt.bar(x, hist, width=bin_step)
         cs = np.arange(0.0, 1.0, 1.0 / bin_size)
         for c, b in zip(cs, bars):
             b.set_facecolor(self.hsv_color_map(c))
-        self.plot.xlim(0, 360.0)
-        return self.image_from_plot(self.plot)
+        plt.xlim(0, 360.0)
+        return self.image_from_plot()
 
     def plot_hist_saturation(self, hist):
-        self.plot.clear()
         bin_size = len(hist)
         bin_step = 256.0 / bin_size
         x = np.arange(256.0, step=bin_step)
-        self.plot.bar(x, hist, width=bin_step)
-        self.plot.xlim(0, 256.0)
-        return self.image_from_plot(self.plot)
+        plt.bar(x, hist, width=bin_step)
+        plt.xlim(0, 256.0)
+        return self.image_from_plot()
 
     def plot_hist_hs(self, hist):
-        self.plot.clear()
         bin_size = int(math.sqrt(len(hist)))
         hist = np.array(hist).reshape(bin_size, bin_size).T
         hist = np.clip(hist * 150 * self.histogram_scale, 0, 1)
