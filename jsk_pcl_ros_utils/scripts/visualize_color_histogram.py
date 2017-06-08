@@ -2,19 +2,18 @@
 # -*- coding: utf-8 -*-
 # Copyright: Yuki Furuta <furushchev@jsk.imi.i.u-tokyo.ac.jp>
 
-<<<<<<< HEAD
 import math
-=======
->>>>>>> furushchev/color-histogram-working
 import cv2
 from cv_bridge import CvBridge
+from dynamic_reconfigure.server import Server
 import numpy as np
 from matplotlib import pyplot as plt
 import rospy
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ColorHistogram, ColorHistogramArray
 from sensor_msgs.msg import Image
-from jsk_pcl_ros_utils.cfg import ColorHistogramConfig as Config
+from jsk_pcl_ros_utils.cfg import VisualizeColorHistogramConfig as Config
+
 
 # matplotlib outputs image with size 800x600 by default
 IMG_WIDTH=800
@@ -25,9 +24,7 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
     def __init__(self):
         super(VisualizeColorHistogram, self).__init__()
 
-        self.histogram_policy = rospy.get_param("~histogram_policy", 2)
-        self.histogram_index = rospy.get_param("~histogram_index", 0)
-        self.histogram_scale = rospy.get_param("~histogram_scale", 1.0)
+        self.dyn_server = Server(Config, self.config_callback)
 
         self.cv_bridge = CvBridge()
         self.hsv_color_map = plt.cm.get_cmap('hsv')
@@ -36,6 +33,11 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         self.hsv_color_map_2d = self.get_hsv_color_map_2d()
 
         self.pub_image = self.advertise("~output", Image, queue_size=1)
+
+    def config_callback(self, config, level):
+        self.histogram_policy = config.histogram_policy
+        self.histogram_index = config.histogram_index
+        self.histogram_scale = config.histogram_scale
 
     def subscribe(self):
         self.sub_histogram = rospy.Subscriber("~input", ColorHistogram, self.callback)

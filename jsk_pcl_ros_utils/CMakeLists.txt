@@ -88,6 +88,7 @@ generate_dynamic_reconfigure_options(
   cfg/PolygonPointsSampler.cfg
   cfg/PoseWithCovarianceStampedToGaussianPointCloud.cfg
   cfg/SphericalPointCloudSimulator.cfg
+  cfg/VisualizeColorHistogram.cfg
 )
 
 find_package(OpenCV REQUIRED core imgproc)
