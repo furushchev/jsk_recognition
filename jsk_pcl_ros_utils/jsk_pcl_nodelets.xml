@@ -111,6 +111,12 @@
       Compute histogram for each point indices
     </description>
   </class>
+  <class name="jsk_pcl_utils/ColorHistogramClassifier" type="jsk_pcl_ros_utils::ColorHistogramClassifier"
+         base_class_type="nodelet::Nodelet">
+    <description>
+      Classify point indices using color histogram
+    </description>
+  </class>
   <class name="jsk_pcl_utils/ColorHistogramFilter" type="jsk_pcl_ros_utils::ColorHistogramFilter"
          base_class_type="nodelet::Nodelet">
     <description>

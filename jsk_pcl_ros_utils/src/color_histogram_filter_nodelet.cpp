@@ -109,7 +109,7 @@ namespace jsk_pcl_ros_utils
 
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
       double distance = jsk_recognition_utils::compareHistogram(
-        input_histogram->histograms[i], reference_histogram_,
+        input_histogram->histograms[i].histogram, reference_histogram_.histogram,
         bin_size_, compare_policy_);
       ROS_DEBUG_STREAM("\t" << i << ": " << distance);
       if (distance_threshold_ > distance) {

@@ -54,9 +54,10 @@ namespace jsk_recognition_utils {
   };
 
   enum ComparePolicy {
-    INNER_PRODUCT = 0,
+    CORRELATION = 0,
     BHATTACHARYYA,
     INTERSECTION,
+    CHISQUARE,
     KL_DIVERGENCE
   };
 
@@ -159,51 +160,69 @@ namespace jsk_recognition_utils {
   }
 
   inline double
-  compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
-                   const jsk_recognition_msgs::ColorHistogram &reference,
+  compareHistogram(const std::vector<float>& input,
+                   const std::vector<float>& reference,
                    const double rotate_degree=0.0,
                    const int bin_size=10,
                    const ComparePolicy policy=KL_DIVERGENCE)
   {
-    if (input.histogram.size() != reference.histogram.size()) {
+    double error_value = -DBL_MAX;
+    if (input.size() != reference.size()) {
       ROS_ERROR("Mismatch histogram bin size");
-      return -1.0;
+      return error_value;
     }
 
     std::vector<float> rotated;
-    rotateHistogram(input.histogram, rotated, rotate_degree, bin_size);
+    rotateHistogram(input, rotated, rotate_degree, bin_size);
 
     double distance = 0.0;
-    switch (policy) {
-    case INNER_PRODUCT:
-      for (size_t i = 0; i < rotated.size(); ++i) {
-        distance += rotated[i] * reference.histogram[i];
+    size_t len = rotated.size();
+    if (policy == CHISQUARE) {
+      for (size_t i = 0; i < len; ++i) {
+        double a = rotated[i] - reference[i], b = rotated[i];
+        if (std::fabs(b) > DBL_EPSILON) distance += a * a / b;
       }
-      break;
-    case BHATTACHARYYA:
-      for (size_t i = 0; i < rotated.size(); ++i) {
-        distance += std::sqrt(rotated[i] * reference.histogram[i]);
+    } else if (policy == CORRELATION) {
+      double s1 = 0.0, s2 = 0.0, s11 = 0.0, s12 = 0.0, s22 = 0.0;
+      for (size_t i = 0; i < len; ++i) {
+        double a = rotated[i], b = reference[i];
+        s11 += a*a; s12 += a*b; s22 += b*b;
+        s1 += a; s2 += b;
       }
-      break;
-    case INTERSECTION:
-      for (size_t i = 0; i < rotated.size(); ++i) {
-        distance += std::min(rotated[i], reference.histogram[i]);
+      double num = s12 - s1*s2/len;
+      double denom2 = (s11 - s1 * s1 / len) * (s22 - s2 * s2 / len);
+      distance = std::fabs(denom2) > DBL_EPSILON ? num / std::sqrt(denom2) : 1.0;
+    } else if (policy == INTERSECTION) {
+      for (size_t i = 0; i < len; ++i) {
+        distance += std::min(rotated[i], reference[i]);
       }
-      break;
-    case KL_DIVERGENCE:
-    default:
-      for (size_t i = 0; i < rotated.size(); ++i) {
-        distance += rotated[i] * std::log((rotated[i] + 1e-9) / (reference.histogram[i] + 1e-9));
+    } else if (policy == BHATTACHARYYA) {
+      double s1 = 0.0, s2 = 0.0;
+      for (size_t i = 0; i < len; ++i) {
+        distance += std::sqrt(rotated[i] * reference[i]);
+        s1 += rotated[i]; s2 += reference[i];
       }
-      distance = std::exp(-1.0 * distance / 3.0);
-      break;
+      s1 *= s2;
+      s1 = std::fabs(s1) > DBL_EPSILON ? 1.0 / std::sqrt(s1) : 1.0;
+      distance = std::sqrt(std::max(1.0 - distance * s1, 0.0));
+    } else if (policy == KL_DIVERGENCE) {
+      for (size_t i = 0; i < len; ++i) {
+        double p = rotated[i], q = reference[i];
+        if (std::fabs(p) <= DBL_EPSILON) continue;
+        if (std::fabs(q) <= DBL_EPSILON) q = 1e-10;
+        distance += p * std::log(p / q);
+      }
+    } else {
+      ROS_ERROR("Invalid compare policy");
+      return error_value;
     }
+
     return distance;
   }
 
   inline double
-  compareHistogram(const jsk_recognition_msgs::ColorHistogram &input,
-                   const jsk_recognition_msgs::ColorHistogram &reference,
+  compareHistogram(const std::vector<float> &input,
+                   const std::vector<float> &reference,
                    const int bin_size=10,
                    const ComparePolicy policy=KL_DIVERGENCE)
   {
