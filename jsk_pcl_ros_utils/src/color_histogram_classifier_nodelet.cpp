@@ -159,6 +159,10 @@ namespace jsk_pcl_ros_utils
       result.labels.push_back(label);
       result.label_names.push_back(label_names_[label]);
       result.label_proba.push_back(max_prob);
+    } else {
+      result.labels.push_back(-1);
+      result.label_names.push_back(std::string());
+      result.label_proba.push_back(0.0);
     }
 
     pub_class_.publish(result);
@@ -192,6 +196,10 @@ namespace jsk_pcl_ros_utils
         result.labels.push_back(label);
         result.label_names.push_back(label_names_[label]);
         result.label_proba.push_back(max_prob);
+      } else {
+        result.labels.push_back(-1);
+        result.label_names.push_back(std::string());
+        result.label_proba.push_back(0.0);
       }
     }
 
