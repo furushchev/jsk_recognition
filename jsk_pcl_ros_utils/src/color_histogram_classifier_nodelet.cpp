@@ -127,7 +127,7 @@ namespace jsk_pcl_ros_utils
     distances.resize(reference_histograms_.size());
     for (size_t i = 0; i < reference_histograms_.size(); ++i) {
       distances[i] = jsk_recognition_utils::compareHistogram(
-        histogram, reference_histograms_[i], 0.0,
+        histogram, reference_histograms_[i],
         bin_size_, compare_policy_);
     }
   }

@@ -84,9 +84,10 @@ namespace jsk_pcl_ros_utils
     // parameters
     int queue_size_;
     int bin_size_;
+    bool flip_threshold_;
     double distance_threshold_;
     jsk_recognition_utils::ComparePolicy compare_policy_;
-    jsk_recognition_msgs::ColorHistogram reference_histogram_;
+    std::vector<float> reference_histogram_;
   };
 }
 

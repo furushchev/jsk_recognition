@@ -46,7 +46,10 @@ namespace jsk_pcl_ros_utils
   {
     DiagnosticNodelet::onInit();
 
-    pnh_->param("initial_histogram", reference_histogram_.histogram, std::vector<float>());
+    pnh_->param("reference_histogram", reference_histogram_, std::vector<float>());
+    if (reference_histogram_.empty()) {
+      ROS_WARN_STREAM("reference histogram is not yet set. waiting ~input/reference topic");
+    }
 
     srv_ = boost::make_shared<dynamic_reconfigure::Server<Config> >(*pnh_);
     dynamic_reconfigure::Server<Config>::CallbackType f =
@@ -63,6 +66,7 @@ namespace jsk_pcl_ros_utils
     compare_policy_ = jsk_recognition_utils::ComparePolicy(config.compare_policy);
     bin_size_ = config.bin_size;
     distance_threshold_ = config.distance_threshold;
+    flip_threshold_ = config.flip_threshold;
     if (queue_size_ = config.queue_size) {
       queue_size_ = config.queue_size;
       if (isSubscribed()) {
@@ -94,9 +98,18 @@ namespace jsk_pcl_ros_utils
                                      const jsk_recognition_msgs::ClusterPointIndices::ConstPtr &input_indices)
   {
     boost::mutex::scoped_lock lock(mutex_);
-    if (reference_histogram_.histogram.empty()) {
+    if (reference_histogram_.empty()) {
       ROS_WARN_THROTTLE(1.0, "reference histogram is empty");
       return;
+    }
+
+    // check histogram size
+    size_t size = reference_histogram_.size();
+    for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
+      if (input_histogram->histograms[i].histogram.size() != size) {
+        ROS_ERROR_STREAM("size of histogram " << i << " is different from reference");
+        return;
+      }
     }
 
     jsk_recognition_msgs::ColorHistogramArray out_hist;
@@ -105,14 +118,13 @@ namespace jsk_pcl_ros_utils
     out_hist.header = input_histogram->header;
     out_indices.header = input_indices->header;
 
-    ROS_DEBUG("histogram distance:");
-
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
       double distance = jsk_recognition_utils::compareHistogram(
-        input_histogram->histograms[i].histogram, reference_histogram_.histogram,
+        input_histogram->histograms[i].histogram, reference_histogram_,
         bin_size_, compare_policy_);
-      ROS_DEBUG_STREAM("\t" << i << ": " << distance);
-      if (distance_threshold_ > distance) {
+      bool ok = flip_threshold_ && distance_threshold_ < distance;
+      ok = ok || (!flip_threshold_ && distance_threshold_ > distance);
+      if (ok) {
         out_hist.histograms.push_back(input_histogram->histograms[i]);
         out_indices.cluster_indices.push_back(input_indices->cluster_indices[i]);
       }
@@ -125,7 +137,7 @@ namespace jsk_pcl_ros_utils
   void ColorHistogramFilter::reference(const jsk_recognition_msgs::ColorHistogram::ConstPtr &input)
   {
     boost::mutex::scoped_lock lock(mutex_);
-    reference_histogram_ = *input;
+    reference_histogram_ = input->histogram;
   }
 }
 

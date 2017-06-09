@@ -61,3 +61,7 @@ Reference histograms are loaded from rosparam on start.
     Reference histogram vector for each class
 
     Length of all histograms must be the same.
+
+* `~detection_threshold` (`Double`, default: `0.8`)
+
+    Color histograms and point cloud indices whose similarities are above this value are published as filtered topics.

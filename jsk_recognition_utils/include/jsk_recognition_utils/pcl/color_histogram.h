@@ -62,7 +62,7 @@ namespace jsk_recognition_utils {
   };
 
   inline int
-  getBin(const double& val, const int& step,
+  getHistogramBin(const double& val, const int& step,
          const double& min, const double& max)
   {
     int idx = std::floor((val - min) / (max - min) * step);
@@ -84,8 +84,8 @@ namespace jsk_recognition_utils {
     for (size_t i = 0; i < cloud.points.size(); ++i)
     {
       pcl::PointXYZHSV p = cloud.points[i];
-      int h_bin = getBin(p.h, bin_size, 0.0, 360.0);
-      int s_bin = getBin(p.s, bin_size, 0.0, 1.0);
+      int h_bin = getHistogramBin(p.h, bin_size, 0.0, 360.0);
+      int s_bin = getHistogramBin(p.s, bin_size, 0.0, 1.0);
 
       if (policy == HUE) histogram[h_bin] += 1.0f;
       else if (policy == SATURATION) histogram[s_bin] += 1.0f;
@@ -101,28 +101,6 @@ namespace jsk_recognition_utils {
     if (sum != 0.0) {
       for (size_t i = 0; i < histogram.size(); ++i) {
         histogram[i] /= sum;
-      }
-    }
-  }
-
-  inline void
-  rotateHistogramByHue(const std::vector<float>&input,
-                       std::vector<float>& output,
-                       const double degree=20.0,
-                       const int bin_size=10)
-  {
-    int offset = std::floor(degree / 360.0 * bin_size);
-    output.resize(input.size(), 0.0);
-
-    for (size_t h = 0; h < bin_size; ++h) {
-      int hout = h + offset >= bin_size ? h + offset - bin_size : h + offset;
-      output[hout] = input[h];
-    }
-
-    if (input.size() > bin_size) {
-      // copy saturation
-      for (size_t s = bin_size; s < bin_size * 2; ++s) {
-        output[s] = input[s];
       }
     }
   }
@@ -162,7 +140,6 @@ namespace jsk_recognition_utils {
   inline double
   compareHistogram(const std::vector<float>& input,
                    const std::vector<float>& reference,
-                   const double rotate_degree=0.0,
                    const int bin_size=10,
                    const ComparePolicy policy=KL_DIVERGENCE)
   {
@@ -172,20 +149,17 @@ namespace jsk_recognition_utils {
       return error_value;
     }
 
-    std::vector<float> rotated;
-    rotateHistogram(input, rotated, rotate_degree, bin_size);
-
     double distance = 0.0;
-    size_t len = rotated.size();
+    size_t len = input.size();
     if (policy == CHISQUARE) {
       for (size_t i = 0; i < len; ++i) {
-        double a = rotated[i] - reference[i], b = rotated[i];
+        double a = input[i] - reference[i], b = input[i];
         if (std::fabs(b) > DBL_EPSILON) distance += a * a / b;
       }
     } else if (policy == CORRELATION) {
       double s1 = 0.0, s2 = 0.0, s11 = 0.0, s12 = 0.0, s22 = 0.0;
       for (size_t i = 0; i < len; ++i) {
-        double a = rotated[i], b = reference[i];
+        double a = input[i], b = reference[i];
         s11 += a*a; s12 += a*b; s22 += b*b;
         s1 += a; s2 += b;
       }
@@ -194,20 +168,20 @@ namespace jsk_recognition_utils {
       distance = std::fabs(denom2) > DBL_EPSILON ? num / std::sqrt(denom2) : 1.0;
     } else if (policy == INTERSECTION) {
       for (size_t i = 0; i < len; ++i) {
-        distance += std::min(rotated[i], reference[i]);
+        distance += std::min(input[i], reference[i]);
       }
     } else if (policy == BHATTACHARYYA) {
       double s1 = 0.0, s2 = 0.0;
       for (size_t i = 0; i < len; ++i) {
-        distance += std::sqrt(rotated[i] * reference[i]);
-        s1 += rotated[i]; s2 += reference[i];
+        distance += std::sqrt(input[i] * reference[i]);
+        s1 += input[i]; s2 += reference[i];
       }
       s1 *= s2;
       s1 = std::fabs(s1) > DBL_EPSILON ? 1.0 / std::sqrt(s1) : 1.0;
       distance = std::sqrt(std::max(1.0 - distance * s1, 0.0));
     } else if (policy == KL_DIVERGENCE) {
       for (size_t i = 0; i < len; ++i) {
-        double p = rotated[i], q = reference[i];
+        double p = input[i], q = reference[i];
         if (std::fabs(p) <= DBL_EPSILON) continue;
         if (std::fabs(q) <= DBL_EPSILON) q = 1e-10;
         distance += p * std::log(p / q);
@@ -218,19 +192,6 @@ namespace jsk_recognition_utils {
     }
 
     return distance;
-  }
-
-  inline double
-  compareHistogram(const std::vector<float> &input,
-                   const std::vector<float> &reference,
-                   const int bin_size=10,
-                   const ComparePolicy policy=KL_DIVERGENCE)
-  {
-    double degree = 20.0;
-    double dcw  = compareHistogram(input, reference, degree, bin_size, policy);
-    double d0   = compareHistogram(input, reference, 0.0, bin_size, policy);
-    double dccw = compareHistogram(input, reference, -degree, bin_size, policy);
-    return std::min(dcw, std::min(d0, dccw));
   }
 }
 

@@ -7,6 +7,7 @@ Filter point indices using color histogram by comparing with reference histogram
 
 Methods for histogram comparison is configurable from multiple methods. (See parameter `~compare_policy`)
 After computing distance between input histograms and reference, filter by thresholding (See parameter `~distance_threshold`)
+Reference histogram can be set as `~reference` topic or as a parameter `~reference_histogram`.
 
 ## Subscribing Topics
 
@@ -18,6 +19,12 @@ After computing distance between input histograms and reference, filter by thres
 * `~input/indices` (`jsk_recognition_msgs/ClusterPointIndices`)
 
     Input point indices
+
+* `~input/reference` (`jsk_recognition_msgs/ColorHistogram`)
+
+    Reference histogram
+
+    It can be set as a parameter. See parameter `~reference_histogram`.
 
 ## Publishing Topics
 
@@ -53,3 +60,18 @@ After computing distance between input histograms and reference, filter by thres
         - Use chi-square between two vectors
     - 4: `KL_DIVERGENCE`
         - Use Kullback-Leibler divergence for comparing two vectors
+
+* `~distance_threshold` (`Double`, default: `0.6`)
+
+    Color histograms and point cloud indices whose similarities are above this value are published as filtered topics.
+
+* `~flip_threshold` (`Bool`, default: `false`)
+
+    Publish indices whose distance from reference is higher than `~distance_threshold` if this value is `false`.
+    If this value is `true`, publish indices whose is lower than threshold.
+
+* `~reference_histogram` (`Float[]`)
+
+    Reference histogram
+
+    It can also be set as topic. See `~input/reference` topic.
