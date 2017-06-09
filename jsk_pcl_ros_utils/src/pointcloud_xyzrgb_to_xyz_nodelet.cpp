@@ -1,8 +1,7 @@
-// -*- mode: C++ -*-
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2016, Satoshi Otsubo and JSK Lab
+ *  Copyright (c) 2017, JSK Lab
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -33,44 +32,57 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#ifndef JSK_PCL_ROS_COLOR_BASED_REGION_GROWING_SEGMENTATION_H_
-#define JSK_PCL_ROS_COLOR_BASED_REGION_GROWING_SEGMENTATION_H_
+#define BOOST_PARAMETER_MAX_ARITY 7
 
-#include <pcl_ros/pcl_nodelet.h>
-#include <pcl/point_types.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/search/search.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl/segmentation/region_growing_rgb.h>
+#include <pcl_conversions/pcl_conversions.h>
 
-#include <dynamic_reconfigure/server.h>
-#include "jsk_pcl_ros/ColorBasedRegionGrowingSegmentationConfig.h"
-#include <jsk_topic_tools/connection_based_nodelet.h>
-namespace jsk_pcl_ros
+#include "jsk_pcl_ros_utils/pointcloud_xyzrgb_to_xyz.h"
+
+namespace jsk_pcl_ros_utils
 {
-  class ColorBasedRegionGrowingSegmentation:
-    public jsk_topic_tools::ConnectionBasedNodelet
-  {
-  public:
-  protected:
-    ros::Publisher pub_;
-    ros::Subscriber sub_;
-    int distance_threshold_;
-    int point_color_threshold_;
-    int region_color_threshold_;
-    int min_cluster_size_;
-    typedef jsk_pcl_ros::ColorBasedRegionGrowingSegmentationConfig Config;
-    boost::shared_ptr <dynamic_reconfigure::Server<Config> > srv_;
-    boost::mutex mutex_;
-    virtual void segment(const sensor_msgs::PointCloud2::ConstPtr& msg);
-    virtual void configCallback (Config &config, uint32_t level);
-    virtual void subscribe();
-    virtual void unsubscribe();
-  private:
-    virtual void onInit();
-  };
+
+void PointCloudXYZRGBToXYZ::onInit()
+{
+  DiagnosticNodelet::onInit();
+  pub_ = advertise<sensor_msgs::PointCloud2>(*pnh_, "output", 1);
+  onInitPostProcess();
 }
 
-#endif
+void PointCloudXYZRGBToXYZ::subscribe()
+{
+  sub_ = pnh_->subscribe("input", 1, &PointCloudXYZRGBToXYZ::convert, this);
+}
+
+void PointCloudXYZRGBToXYZ::unsubscribe()
+{
+  sub_.shutdown();
+}
+
+void PointCloudXYZRGBToXYZ::convert(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg)
+{
+  vital_checker_->poke();
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_xyzrgb(new pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::fromROSMsg(*cloud_msg, *cloud_xyzrgb);
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+  cloud_xyz->points.resize(cloud_xyzrgb->points.size());
+  cloud_xyz->is_dense = cloud_xyzrgb->is_dense;
+  cloud_xyz->width = cloud_xyzrgb->width;
+  cloud_xyz->height = cloud_xyzrgb->height;
+  for (size_t i = 0; i < cloud_xyzrgb->points.size(); i++) {
+    pcl::PointXYZ p;
+    p.x = cloud_xyzrgb->points[i].x;
+    p.y = cloud_xyzrgb->points[i].y;
+    p.z = cloud_xyzrgb->points[i].z;
+    cloud_xyz->points[i] = p;
+  }
+  sensor_msgs::PointCloud2 out_cloud_msg;
+  pcl::toROSMsg(*cloud_xyz, out_cloud_msg);
+  out_cloud_msg.header = cloud_msg->header;
+  pub_.publish(out_cloud_msg);
+}
+
+}  // namespace jsk_pcl_ros_utils
+
+#include <pluginlib/class_list_macros.h>
+PLUGINLIB_EXPORT_CLASS(jsk_pcl_ros_utils::PointCloudXYZRGBToXYZ, nodelet::Nodelet);
