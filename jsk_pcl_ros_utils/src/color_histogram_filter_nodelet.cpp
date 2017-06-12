@@ -64,7 +64,6 @@ namespace jsk_pcl_ros_utils
   {
     boost::mutex::scoped_lock lock(mutex_);
     compare_policy_ = jsk_recognition_utils::ComparePolicy(config.compare_policy);
-    bin_size_ = config.bin_size;
     distance_threshold_ = config.distance_threshold;
     flip_threshold_ = config.flip_threshold;
     if (queue_size_ = config.queue_size) {
@@ -119,10 +118,11 @@ namespace jsk_pcl_ros_utils
     out_indices.header = input_indices->header;
 
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
-      double distance = jsk_recognition_utils::compareHistogram(
+      double distance = 0.0;
+      bool ok = jsk_recognition_utils::compareHistogram(
         input_histogram->histograms[i].histogram, reference_histogram_,
-        bin_size_, compare_policy_);
-      bool ok = flip_threshold_ && distance_threshold_ < distance;
+        compare_policy_, distance);
+      ok = ok || flip_threshold_ && distance_threshold_ < distance;
       ok = ok || (!flip_threshold_ && distance_threshold_ > distance);
       if (ok) {
         out_hist.histograms.push_back(input_histogram->histograms[i]);

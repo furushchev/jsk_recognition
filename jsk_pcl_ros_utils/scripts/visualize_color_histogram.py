@@ -54,16 +54,14 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         hsv_map = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
         h, s = np.indices(hsv_map.shape[:2])
         hsv_map[:, :, 0] = h / float(IMG_HEIGHT) * 180.0
-        hsv_map[:, :, 1] = s / float(IMG_WIDTH)  * 256.0
-        hsv_map[:, :, 2] = 255.0
-        hsv_map = cv2.cvtColor(hsv_map, cv2.COLOR_HSV2BGR)
+        hsv_map[:, :, 1] = 125.0
+        hsv_map[:, :, 2] = s / float(IMG_WIDTH)  * 256.0
+        hsv_map = cv2.cvtColor(hsv_map, cv2.COLOR_HLS2BGR)
         return hsv_map
 
     def callback(self, msg):
         if self.histogram_policy == Config.VisualizeColorHistogram_HUE:
             img = self.plot_hist_hue(msg.histogram)
-        elif self.histogram_policy == Config.VisualizeColorHistogram_SATURATION:
-            img = self.plot_hist_saturation(msg.histogram)
         elif self.histogram_policy == Config.VisualizeColorHistogram_HUE_AND_SATURATION:
             img = self.plot_hist_hs(msg.histogram)
         else:
@@ -92,13 +90,14 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         return img
 
     def plot_hist_hue(self, hist):
-        bin_size = len(hist)
+        bin_size = len(hist) - 2
         bin_step = 360.0 / bin_size
         x = np.arange(360.0, step=bin_step)
         bars = plt.bar(x, hist, width=bin_step)
         cs = np.arange(0.0, 1.0, 1.0 / bin_size)
-        for c, b in zip(cs, bars):
+        for c, b in zip(cs, bars[:-2]):
             b.set_facecolor(self.hsv_color_map(c))
+        b.set_facecolor(
         plt.xlim(0, 360.0)
         return self.image_from_plot()
 
@@ -111,7 +110,7 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         return self.image_from_plot()
 
     def plot_hist_hs(self, hist):
-        bin_size = int(math.sqrt(len(hist)))
+        bin_size = int(math.sqrt(len(hist))) - 2
         hist = np.array(hist).reshape(bin_size, bin_size).T
         hist = np.clip(hist * 150 * self.histogram_scale, 0, 1)
         hist = hist[:, :, np.newaxis]

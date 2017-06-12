@@ -59,6 +59,8 @@ namespace jsk_pcl_ros_utils
     boost::mutex::scoped_lock lock(mutex_);
     bin_size_ = config.bin_size;
     histogram_policy_ = jsk_recognition_utils::HistogramPolicy(config.histogram_policy);
+    white_threshold_ = config.white_threshold;
+    black_threshold_ = config.black_threshold;
     if (queue_size_ != config.queue_size) {
       queue_size_ = config.queue_size;
       if (isSubscribed()) {
@@ -95,12 +97,13 @@ namespace jsk_pcl_ros_utils
 
     pcl::PointCloud<pcl::PointXYZHSV>::Ptr hsv_cloud(new pcl::PointCloud<pcl::PointXYZHSV>);
     pcl::PointCloudXYZRGBtoXYZHSV(*rgb_cloud, *hsv_cloud);
+/*
     for (size_t i = 0; i < rgb_cloud->points.size(); i++) {
       hsv_cloud->points[i].x = rgb_cloud->points[i].x;
       hsv_cloud->points[i].y = rgb_cloud->points[i].y;
       hsv_cloud->points[i].z = rgb_cloud->points[i].z;
     }
-
+*/
     pcl::ExtractIndices<pcl::PointXYZHSV> extract;
     extract.setInputCloud(hsv_cloud);
 
@@ -113,10 +116,22 @@ namespace jsk_pcl_ros_utils
       pcl::PointCloud<pcl::PointXYZHSV> segmented_cloud;
       extract.filter(segmented_cloud);
       histogram_array.histograms[i].header = input_cloud->header;
-      jsk_recognition_utils::computeColorHistogram(segmented_cloud,
-                                                   histogram_array.histograms[i].histogram,
-                                                   histogram_policy_,
-                                                   bin_size_);
+      if (histogram_policy_ == jsk_recognition_utils::HUE) {
+        jsk_recognition_utils::computeColorHistogram1d(segmented_cloud,
+                                                       histogram_array.histograms[i].histogram,
+                                                       bin_size_,
+                                                       white_threshold_,
+                                                       black_threshold_);
+      } else if (histogram_policy_ == jsk_recognition_utils::HUE_AND_SATURATION) {
+        jsk_recognition_utils::computeColorHistogram2d(segmented_cloud,
+                                                       histogram_array.histograms[i].histogram,
+                                                       bin_size_,
+                                                       white_threshold_,
+                                                       black_threshold_);
+      } else {
+        ROS_FATAL("Invalid histogram policy");
+        return;
+      }
     }
     pub_histogram_.publish(histogram_array);
   }

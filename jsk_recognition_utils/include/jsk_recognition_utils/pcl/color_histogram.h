@@ -49,7 +49,6 @@
 namespace jsk_recognition_utils {
   enum HistogramPolicy {
     HUE = 0,
-    SATURATION,
     HUE_AND_SATURATION
   };
 
@@ -60,6 +59,20 @@ namespace jsk_recognition_utils {
     CHISQUARE,
     KL_DIVERGENCE
   };
+
+  struct PointXYZHSL {
+    double x, y, z;
+    double h, s, l;
+  };
+
+  inline void
+  HSV2HSL(const pcl::PointXYZHSV& hsv, PointXYZHSL hsl) {
+    hsl.x = hsv.x; hsl.y = hsv.y; hsl.z = hsv.z;
+    hsl.h = hsv.h;
+    double h = (2.0 - hsv.s) * hsv.v;
+    hsl.s = hsv.s * hsv.v / (h < 1.0 ? h : 2.0 - h);
+    hsl.l = h / 2.0;
+  }
 
   inline int
   getHistogramBin(const double& val, const int& step,
@@ -72,24 +85,103 @@ namespace jsk_recognition_utils {
   }
 
   inline void
+  normalizeHistogram(std::vector<float>& histogram)
+  {
+    float sum = 0.0f;
+    for (size_t i = 0; i < histogram.size(); ++i)
+      sum += histogram[i];
+    if (sum != 0.0) {
+      for (size_t i = 0; i < histogram.size(); ++i)
+        histogram[i] /= sum;
+    }
+  }
+
+  inline void
+  computeColorHistogram1d(const pcl::PointCloud<pcl::PointXYZHSV>& cloud,
+                          std::vector<float>& histogram,
+                          const int bin_size,
+                          const double white_threshold=0.1,
+                          const double black_threshold=0.1)
+  {
+    histogram.resize(bin_size + 2, 0.0f); // h + w + b
+    int white_index = bin_size;
+    int black_index = bin_size + 1;
+
+    for (size_t i = 0; i < cloud.points.size(); ++i) {
+      PointXYZHSL p;
+      HSV2HSL(cloud.points[i], p);
+      if (p.l < white_threshold)
+        histogram[white_index] += 1.0f;
+      else if (1.0 - p.l > black_threshold)
+        histogram[black_index] += 1.0f;
+      else {
+        int h_bin = getHistogramBin(p.h, bin_size, 0.0, 360.0);
+        int s_bin = getHistogramBin(p.s, bin_size, 0.0, 1.0);
+        histogram[s_bin * bin_size + h_bin] += 1.0f;
+      }
+    }
+
+    normalizeHistogram(histogram);
+  }
+
+  inline void
+  computeColorHistogram2d(const pcl::PointCloud<pcl::PointXYZHSV>& cloud,
+                          std::vector<float>& histogram,
+                          const int bin_size_per_channel,
+                          const double white_threshold=0.1,
+                          const double black_threshold=0.1)
+  {
+    histogram.resize(bin_size_per_channel  * bin_size_per_channel + 2, 0.0f); // h * s + w + b
+    int white_index = bin_size_per_channel * bin_size_per_channel;
+    int black_index = bin_size_per_channel * bin_size_per_channel + 1;
+
+    // vote
+    for (size_t i = 0; i < cloud.points.size(); ++i) {
+      PointXYZHSL p;
+      HSV2HSL(cloud.points[i], p);
+      if (p.l < white_threshold)
+        histogram[white_index] += 1.0f;
+      else if (p.l > 1.0 - black_threshold)
+        histogram[black_index] += 1.0f;
+      else {
+        int h_bin = getHistogramBin(p.h, bin_size_per_channel, 0.0, 360.0);
+        int s_bin = getHistogramBin(p.s, bin_size_per_channel, 0.0, 1.0);
+        histogram[s_bin * bin_size_per_channel + h_bin] += 1.0f;
+      }
+    }
+
+    normalizeHistogram(histogram);
+  }
+
+/*
+  inline void
   computeColorHistogram(const pcl::PointCloud<pcl::PointXYZHSV>& cloud,
                         std::vector<float>& histogram,
-                        const HistogramPolicy policy=HUE_AND_SATURATION,
-                        const int bin_size=10)
+                        const HistogramPolicy policy,
+                        const int bin_size,
+                        const double white_threshold,
+                        const double black_threshold)
   {
     if (policy == HUE_AND_SATURATION) histogram.resize(bin_size * bin_size, 0.0f);
     else histogram.resize(bin_size, 0.0f);
+
+    int color_bin_size = bin_size - 2;
+    int white_index = bin_size - 2, black_index = bin_size - 1;
 
     // histogram
     for (size_t i = 0; i < cloud.points.size(); ++i)
     {
       pcl::PointXYZHSV p = cloud.points[i];
-      int h_bin = getHistogramBin(p.h, bin_size, 0.0, 360.0);
-      int s_bin = getHistogramBin(p.s, bin_size, 0.0, 1.0);
+      if (p.v < black_threshold_) histogram[black_index] += 1.0f;
+      else if (p.s < white_threshold_) histogram[white_index] += 1.0f;
+      else {
+        int h_bin = getHistogramBin(p.h, bin_size, 0.0, 360.0);
+        int s_bin = getHistogramBin(p.s, bin_size, 0.0, 1.0);
 
-      if (policy == HUE) histogram[h_bin] += 1.0f;
-      else if (policy == SATURATION) histogram[s_bin] += 1.0f;
-      else histogram[s_bin * bin_size + h_bin] += 1.0f;
+        if (policy == HUE) histogram[h_bin] += 1.0f;
+        else if (policy == SATURATION) histogram[s_bin] += 1.0f;
+        else histogram[s_bin * bin_size + h_bin] += 1.0f;
+      }
     }
 
     // normalization
@@ -104,7 +196,48 @@ namespace jsk_recognition_utils {
       }
     }
   }
+*/
 
+  inline void
+  rotateHistogram1d(const std::vector<float>& input,
+                    std::vector<float>& output,
+                    const double degree)
+  {
+    size_t bin_size = input.size() - 2;
+    int offset = std::floor(degree / 360.0 * bin_size);
+    output.resize(input.size());
+    for (size_t h = 0; h < bin_size; ++h) {
+      int hout = h + offset % bin_size;
+      output[hout] = input[h];
+    }
+
+    // copy white + black
+    int index = bin_size;
+    output[index] = input[index];
+    output[index+1] = input[index+1];
+  }
+
+  inline void
+  rotateHistogram2d(const std::vector<float>& input,
+                    std::vector<float>& output,
+                    const double degree)
+  {
+    size_t bin_size = (size_t)(std::sqrt(input.size() - 2));
+    int offset = std::floor(degree / 360.0 * bin_size);
+    output.resize(input.size());
+    for (size_t s = 0; s < bin_size; ++s) {
+      for (size_t h = 0; h < bin_size; ++h) {
+        int hout = h + offset % bin_size;
+        output[s * bin_size + hout] = input[s * bin_size + h];
+      }
+    }
+
+    // copy white + black
+    int index = bin_size * bin_size;
+    output[index] = input[index];
+    output[index+1] = input[index+1];
+  }
+/*
   inline void
   rotateHistogram(const std::vector<float>& input,
                   std::vector<float>& output,
@@ -136,20 +269,19 @@ namespace jsk_recognition_utils {
       }
     }
   }
-
-  inline double
+*/
+  inline bool
   compareHistogram(const std::vector<float>& input,
                    const std::vector<float>& reference,
-                   const int bin_size=10,
-                   const ComparePolicy policy=KL_DIVERGENCE)
+                   const ComparePolicy policy,
+                   double& distance)
   {
-    double error_value = -DBL_MAX;
     if (input.size() != reference.size()) {
       ROS_ERROR("Mismatch histogram bin size");
-      return error_value;
+      return false;
     }
 
-    double distance = 0.0;
+    distance = 0.0;
     size_t len = input.size();
     if (policy == CHISQUARE) {
       for (size_t i = 0; i < len; ++i) {
@@ -188,11 +320,11 @@ namespace jsk_recognition_utils {
       }
     } else {
       ROS_ERROR("Invalid compare policy");
-      return error_value;
+      return false;
     }
 
-    return distance;
+    return true;
   }
-}
+} // namespace
 
 #endif // JSK_RECOGNITION_UTILS_COLOR_HISTOGRAM_H__
