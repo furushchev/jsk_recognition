@@ -97,13 +97,13 @@ namespace jsk_pcl_ros_utils
 
     pcl::PointCloud<pcl::PointXYZHSV>::Ptr hsv_cloud(new pcl::PointCloud<pcl::PointXYZHSV>);
     pcl::PointCloudXYZRGBtoXYZHSV(*rgb_cloud, *hsv_cloud);
-/*
+
     for (size_t i = 0; i < rgb_cloud->points.size(); i++) {
       hsv_cloud->points[i].x = rgb_cloud->points[i].x;
       hsv_cloud->points[i].y = rgb_cloud->points[i].y;
       hsv_cloud->points[i].z = rgb_cloud->points[i].z;
     }
-*/
+
     pcl::ExtractIndices<pcl::PointXYZHSV> extract;
     extract.setInputCloud(hsv_cloud);
 

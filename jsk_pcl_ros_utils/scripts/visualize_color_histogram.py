@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+from matplotlib import gridspec
 import rospy
 from jsk_topic_tools import ConnectionBasedTransport
 from jsk_recognition_msgs.msg import ColorHistogram, ColorHistogramArray
@@ -90,15 +91,23 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         return img
 
     def plot_hist_hue(self, hist):
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
+        plt.subplot(gs[0])
         bin_size = len(hist) - 2
         bin_step = 360.0 / bin_size
         x = np.arange(360.0, step=bin_step)
-        bars = plt.bar(x, hist, width=bin_step)
+        bars = plt.bar(x, hist[:-2], width=bin_step)
         cs = np.arange(0.0, 1.0, 1.0 / bin_size)
-        for c, b in zip(cs, bars[:-2]):
+        for c, b in zip(cs, bars):
             b.set_facecolor(self.hsv_color_map(c))
-        b.set_facecolor(
         plt.xlim(0, 360.0)
+        plt.ylim(ymin=0.0, ymax=1.0)
+        ymin, ymax = plt.ylim()
+        plt.subplot(gs[1])
+        bars = plt.bar(range(2), hist[-2:], width=1.0, label=["white", "black"])
+        bars[0].set_facecolor((1.0, 1.0, 1.0, 1.0))
+        bars[1].set_facecolor((0.0, 0.0, 0.0, 1.0))
+        plt.ylim(ymin, ymax)
         return self.image_from_plot()
 
     def plot_hist_saturation(self, hist):
@@ -110,9 +119,11 @@ class VisualizeColorHistogram(ConnectionBasedTransport):
         return self.image_from_plot()
 
     def plot_hist_hs(self, hist):
-        bin_size = int(math.sqrt(len(hist))) - 2
-        hist = np.array(hist).reshape(bin_size, bin_size).T
-        hist = np.clip(hist * 150 * self.histogram_scale, 0, 1)
+        bin_size = int(math.sqrt(len(hist) - 2))
+        white, black = hist[-2], hist[-1]
+        hist = np.array(hist[:-2]).reshape(bin_size, bin_size).T
+        rospy.loginfo("white: %f, black: %f" % (white, black))
+        hist = np.clip(hist * 150 * self.histogram_scale, white, 1.0 - black)
         hist = hist[:, :, np.newaxis]
         hist = cv2.resize(hist, (IMG_WIDTH, IMG_HEIGHT))
         hist = hist[:, :, np.newaxis]

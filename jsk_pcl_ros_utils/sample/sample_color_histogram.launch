@@ -25,8 +25,8 @@
       <remap from="~input" to="input_relay/output"/>
       <remap from="~input/indices" to="point_cloud_to_cluster_point_indices/output" />
       <rosparam>
-        bin_size: 100
-        histogram_policy: 2
+        bin_size: 20
+        histogram_policy: 0
       </rosparam>
     </node>
 
@@ -34,7 +34,7 @@
           pkg="jsk_pcl_ros_utils" type="visualize_color_histogram.py" output="screen">
       <remap from="~input/array" to="color_histogram/output"/>
       <rosparam>
-        histogram_policy: 2
+        histogram_policy: 0
         histogram_index: 0
         histogram_scale: 1.0
       </rosparam>
