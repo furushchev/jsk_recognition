@@ -48,7 +48,7 @@ namespace jsk_pcl_ros_utils
 
     pnh_->param("reference_histogram", reference_histogram_, std::vector<float>());
     if (reference_histogram_.empty()) {
-      ROS_WARN_STREAM("reference histogram is not yet set. waiting ~input/reference topic");
+      NODELET_WARN_STREAM("reference histogram is not yet set. waiting ~input/reference topic");
     }
 
     srv_ = boost::make_shared<dynamic_reconfigure::Server<Config> >(*pnh_);
@@ -98,7 +98,7 @@ namespace jsk_pcl_ros_utils
   {
     boost::mutex::scoped_lock lock(mutex_);
     if (reference_histogram_.empty()) {
-      ROS_WARN_THROTTLE(1.0, "reference histogram is empty");
+      NODELET_WARN_THROTTLE(1.0, "reference histogram is empty");
       return;
     }
 
@@ -106,7 +106,7 @@ namespace jsk_pcl_ros_utils
     size_t size = reference_histogram_.size();
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
       if (input_histogram->histograms[i].histogram.size() != size) {
-        ROS_ERROR_STREAM("size of histogram " << i << " is different from reference");
+        NODELET_ERROR_STREAM("size of histogram " << i << " is different from reference");
         return;
       }
     }
@@ -117,13 +117,15 @@ namespace jsk_pcl_ros_utils
     out_hist.header = input_histogram->header;
     out_indices.header = input_indices->header;
 
+    NODELET_DEBUG("distance_threshold: %f", distance_threshold_);
     for (size_t i = 0; i < input_histogram->histograms.size(); ++i) {
       double distance = 0.0;
       bool ok = jsk_recognition_utils::compareHistogram(
         input_histogram->histograms[i].histogram, reference_histogram_,
         compare_policy_, distance);
-      ok = ok || flip_threshold_ && distance_threshold_ < distance;
-      ok = ok || (!flip_threshold_ && distance_threshold_ > distance);
+      if (flip_threshold_) ok &= distance_threshold_ < distance;
+      else                 ok &= distance_threshold_ > distance;
+      NODELET_DEBUG("#%lu: %f (%s)", i, distance, ok ? "OK" : "NG");
       if (ok) {
         out_hist.histograms.push_back(input_histogram->histograms[i]);
         out_indices.cluster_indices.push_back(input_indices->cluster_indices[i]);

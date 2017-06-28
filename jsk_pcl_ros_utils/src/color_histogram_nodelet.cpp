@@ -129,7 +129,7 @@ namespace jsk_pcl_ros_utils
                                                        white_threshold_,
                                                        black_threshold_);
       } else {
-        ROS_FATAL("Invalid histogram policy");
+        NODELET_FATAL("Invalid histogram policy");
         return;
       }
     }

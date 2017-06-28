@@ -65,18 +65,18 @@ namespace jsk_pcl_ros_utils
     std::vector<std::string> labels;
     pnh_->param("label_names", labels, std::vector<std::string>());
     if (labels.empty()) {
-      ROS_FATAL_STREAM("param ~label_names must not be empty");
+      NODELET_FATAL_STREAM("param ~label_names must not be empty");
       return false;
     }
 
     // load histograms
     for (size_t i = 0; i < labels.size(); ++i) {
       std::string name = "histograms/" + labels[i];
-      ROS_INFO_STREAM("Loading " << name);
+      NODELET_INFO_STREAM("Loading " << name);
       std::vector<float> hist;
       pnh_->param(name, hist, std::vector<float>());
       if (hist.empty()) {
-        ROS_ERROR_STREAM("Failed to load " << name);
+        NODELET_ERROR_STREAM("Failed to load " << name);
       } else {
         label_names_.push_back(labels[i]);
         reference_histograms_.push_back(hist);
@@ -87,12 +87,12 @@ namespace jsk_pcl_ros_utils
     bin_size_ = reference_histograms_[0].size();
     for (size_t i = 0; i < label_names_.size(); ++i) {
       if (reference_histograms_[i].size() != bin_size_) {
-        ROS_FATAL_STREAM("size of histogram " << label_names_[i] << " is different from " << label_names_[0]);
+        NODELET_FATAL_STREAM("size of histogram " << label_names_[i] << " is different from " << label_names_[0]);
         return false;
       }
     }
 
-    ROS_INFO_STREAM("Loaded " << label_names_.size() << " references");
+    NODELET_INFO_STREAM("Loaded " << label_names_.size() << " references");
     return true;
   }
 

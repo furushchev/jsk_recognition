@@ -17,7 +17,7 @@
   </node>
 
   <node name="color_histogram"
-        pkg="jsk_pcl_ros_utils" type="color_histogram">
+        pkg="jsk_pcl_ros_utils" type="color_histogram" output="screen">
     <remap from="~input" to="$(arg cloud_input)"/>
     <remap from="~input/indices" to="indices/output" />
     <rosparam>
@@ -27,24 +27,25 @@
   </node>
 
   <node name="color_histogram_filter"
-        pkg="jsk_pcl_ros_utils" type="color_histogram_filter">
+        pkg="jsk_pcl_ros_utils" type="color_histogram_filter" output="screen">
     <remap from="~input" to="color_histogram/output" />
     <remap from="~input/indices" to="indices/output" />
     <rosparam>
       bin_size: 10
-      distance_threshold: 1.0
-      reference_histogram: [0.4496940076351166, 0.022353515028953552, 0.021087240427732468, 0.01058268267661333, 0.023007811978459358, 0.16684244573116302, 0.16969726979732513, 0.05753906071186066, 0.027093099430203438, 0.052102863788604736]
+      distance_threshold: 0.9999
+      flip_threshold: true
+      reference_histogram: [0.1366894543170929, 0.018193358555436134, 0.019957682117819786, 0.010312500409781933, 0.02364908903837204, 0.13187174499034882, 0.13228841125965118, 0.05075846239924431, 0.021832682192325592, 0.0352376289665699, 0.18575845658779144, 0.2334505170583725]
     </rosparam>
   </node>
 
   <node name="color_histogram_classifier"
-        pkg="jsk_pcl_ros_utils" type="color_histogram_classifier">
+        pkg="jsk_pcl_ros_utils" type="color_histogram_classifier" output="screen">
     <remap from="~input/array" to="color_histogram/output" />
     <rosparam>
       label_names:
         - test
       histograms:
-        test: [0.4496940076351166, 0.022353515028953552, 0.021087240427732468, 0.01058268267661333, 0.023007811978459358, 0.16684244573116302, 0.16969726979732513, 0.05753906071186066, 0.027093099430203438, 0.052102863788604736]
+        test: [0.1366894543170929, 0.018193358555436134, 0.019957682117819786, 0.010312500409781933, 0.02364908903837204, 0.13187174499034882, 0.13228841125965118, 0.05075846239924431, 0.021832682192325592, 0.0352376289665699, 0.18575845658779144, 0.2334505170583725]
     </rosparam>
   </node>
 
