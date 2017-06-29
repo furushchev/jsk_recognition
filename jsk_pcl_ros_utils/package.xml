@@ -41,14 +41,14 @@
   <build_depend>ml_classifiers</build_depend>
   <build_depend>diagnostic_updater</build_depend>
   <build_depend>diagnostic_msgs</build_depend>
-  <build_depend>jsk_topic_tools</build_depend>
+  <build_depend version_gte="2.2.4">jsk_topic_tools</build_depend> <!-- ColorHistogram needs https://github.com/jsk-ros-pkg/jsk_common/commit/f024496c880c0fd53baa2639877b51dcfbee804d?short_path=3e883dc#diff-3e883dcfbeca3fd4c5f14dcb41b24362 (https://github.com/jsk-ros-pkg/jsk_common/pull/1523) -->
   <build_depend>roscpp_tutorials</build_depend>
   <build_depend>jsk_data</build_depend>
   <build_depend>jsk_footstep_msgs</build_depend>
   <build_depend>jsk_recognition_utils</build_depend>
   <build_depend>robot_self_filter</build_depend>
   <run_depend>roscpp_tutorials</run_depend>
-  <run_depend>jsk_topic_tools</run_depend>
+  <run_depend version_gte="2.2.4">jsk_topic_tools</run_depend>
   <build_depend>kdl_parser</build_depend>
   <build_depend>kdl_conversions</build_depend>
   <build_depend>nav_msgs</build_depend>
