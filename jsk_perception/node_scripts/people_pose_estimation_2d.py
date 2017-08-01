@@ -97,6 +97,7 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         self.thre2 = rospy.get_param('~thre2', 0.05)
         self.gpu = rospy.get_param('~gpu', -1)  # -1 is cpu mode
         self.with_depth = rospy.get_param('~with_depth', False)
+        self.sync_camera_info = rospy.get_param("~sync_camera_info", False)
         self._load_model()
         self.image_pub = self.advertise('~output', Image, queue_size=1)
         self.pose_pub = self.advertise('~pose', PeoplePoseArray, queue_size=1)
@@ -127,9 +128,13 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
                 '~input', Image, queue_size=1, buff_size=2**24)
             sub_depth = message_filters.Subscriber(
                 '~input/depth', Image, queue_size=1, buff_size=2**24)
-            sub_info = message_filters.Subscriber(
-                '~input/info', CameraInfo, queue_size=1, buff_size=2**24)
-            self.subs = [sub_img, sub_depth, sub_info]
+            if self.sync_camera_info:
+                sub_info = message_filters.Subscriber(
+                    '~input/info', CameraInfo, queue_size=1, buff_size=2**24)
+               self.subs = [sub_img, sub_depth, sub_info]
+            else:
+                self.subs = [sub_img, sub_depth]
+
             if rospy.get_param('~approximate_sync', True):
                 slop = rospy.get_param('~slop', 0.1)
                 sync = message_filters.ApproximateTimeSynchronizer(
@@ -138,6 +143,11 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
                 sync = message_filters.TimeSynchronizer(
                     fs=self.subs, queue_size=queue_size)
             sync.registerCallback(self._cb_with_depth)
+            if not self.sync_camera_info:
+                self.camera_info_msg = None
+                self.sub_camera_info = rospy.Subscriber(
+                    "~input/info", CameraInfo, self._cb_cam_info, queue_size=1)
+
         else:
             sub_img = rospy.Subscriber(
                 '~input', Image, self._cb, queue_size=1, buff_size=2**24)
@@ -146,8 +156,21 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
     def unsubscribe(self):
         for sub in self.subs:
             sub.unregister()
+        self.sub_camera_info.unregister()
 
-    def _cb_with_depth(self, img_msg, depth_msg, camera_info_msg):
+    def _cb_cam_info(self, camera_info_msg):
+        self.camera_info_msg = camera_info_msg
+        self.sub_camera_info.unregister()
+
+    def _cb_with_depth(self, img_msg, depth_msg, camera_info_msg=None):
+        if camera_info_msg is None:
+            if self.camera_info_msg is None:
+                cam_info_topic = rospy.resolve_name("~input/info")
+                rospy.logwarn("camera info is not yet received. ({})".format(
+                    cam_info_topic))
+                return
+            else:
+                camera_info_msg = self.camera_info_msg
         br = cv_bridge.CvBridge()
         img = br.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
         depth_img = br.imgmsg_to_cv2(depth_msg, 'passthrough')
