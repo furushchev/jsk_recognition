@@ -48,6 +48,9 @@ class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
             n_layers=50,
             n_fg_class=n_fg_class,
             pretrained_model=pretrained_model,
+            anchor_scales=rospy.get_param("~anchor_scales", None),
+            min_size=rospy.get_param("~min_size", None),
+            max_size=rospy.get_param("~max_size", None),
         )
         self.model.score_thresh = rospy.get_param('~score_thresh', 0.7)
         if self.gpu >= 0:
