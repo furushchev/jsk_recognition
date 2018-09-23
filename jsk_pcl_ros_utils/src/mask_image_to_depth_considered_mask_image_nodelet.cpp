@@ -44,7 +44,6 @@ namespace jsk_pcl_ros_utils
   void MaskImageToDepthConsideredMaskImage::onInit()
   {
     DiagnosticNodelet::onInit();
-    pnh_->param("approximate_sync", approximate_sync_, false);
     pub_ = advertise<sensor_msgs::Image>(*pnh_, "output", 1);
     applypub_ = advertise<sensor_msgs::Image>(*pnh_, "applyoutput", 1);
     srv_ = boost::make_shared <dynamic_reconfigure::Server<Config> > (*pnh_);
@@ -66,6 +65,16 @@ namespace jsk_pcl_ros_utils
     extract_num_ = config.extract_num;
     use_mask_region_ = config.use_mask_region;
     in_the_order_of_depth_ = config.in_the_order_of_depth;
+
+    if (approximate_sync_ != config.approximate_sync ||
+        queue_size_ != config.queue_size) {
+      approximate_sync_ = config.approximate_sync;
+      queue_size_ = config.queue_size;
+      if (isSubscribed()) {
+        unsubscribe();
+        subscribe();
+      }
+    }
   }
 
 
@@ -110,15 +119,15 @@ namespace jsk_pcl_ros_utils
     sub_input_.subscribe(*pnh_, "input", 1);
     sub_image_.subscribe(*pnh_, "input/image", 1);
     if (approximate_sync_) {
-      async_ = boost::make_shared<message_filters::Synchronizer<ApproximateSyncPolicy> >(100);
+      async_ = boost::make_shared<message_filters::Synchronizer<ApproximateSyncPolicy> >(queue_size_);
       async_->connectInput(sub_input_, sub_image_);
       async_->registerCallback(boost::bind(&MaskImageToDepthConsideredMaskImage::extractmask, this, _1, _2));
     }
     else {
-      sync_ = boost::make_shared<message_filters::Synchronizer<SyncPolicy> >(100);
+      sync_ = boost::make_shared<message_filters::Synchronizer<SyncPolicy> >(queue_size_);
       sync_->connectInput(sub_input_, sub_image_);
       sync_->registerCallback(boost::bind(&MaskImageToDepthConsideredMaskImage::extractmask,
-					  this, _1, _2));
+                                          this, _1, _2));
     }
   }
   

@@ -17,6 +17,8 @@ except ImportError:
     sys.exit(1)
 
 import cv_bridge
+from dynamic_reconfigure.server import Server
+from jsk_perception.cfg import MaskRCNNInstanceSegmentationConfig as Config
 from jsk_recognition_msgs.msg import ClusterPointIndices
 from jsk_recognition_msgs.msg import Label
 from jsk_recognition_msgs.msg import LabelArray
@@ -52,9 +54,11 @@ class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
             min_size=rospy.get_param("~min_size", None),
             max_size=rospy.get_param("~max_size", None),
         )
-        self.model.score_thresh = rospy.get_param('~score_thresh', 0.7)
+
         if self.gpu >= 0:
             self.model.to_gpu()
+
+        self.srv = Server(Config, self.config_callback)
 
         self.pub_indices = self.advertise(
             '~output/cluster_indices', ClusterPointIndices, queue_size=1)
@@ -73,6 +77,10 @@ class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
 
     def unsubscribe(self):
         self.sub.unregister()
+
+    def config_callback(self, config, level):
+        self.model.score_thresh = config.score_thresh
+        return config
 
     def callback(self, imgmsg):
         bridge = cv_bridge.CvBridge()
