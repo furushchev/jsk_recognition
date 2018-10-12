@@ -212,8 +212,8 @@ namespace jsk_pcl_ros_utils
           pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
           kdtree.setInputCloud(edge_cloud);
           pcl::PointXYZ zero;
-          std::vector<int> near_indices;
-          std::vector<float> near_distances;
+          std::vector<int> near_indices(extract_num_);
+          std::vector<float> near_distances(extract_num_);
           kdtree.nearestKSearch(zero, extract_num_, near_indices, near_distances);
           ROS_INFO("directed num of extract points:%d   num of nearestKSearch points:%d", extract_num_, ((int) near_indices.size()));
           int ext_num=std::min(extract_num_, ((int) near_indices.size()));
