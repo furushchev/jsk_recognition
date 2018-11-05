@@ -76,17 +76,17 @@ namespace jsk_pcl_ros_utils
       if (target_channel_ < 0) {
         jsk_recognition_msgs::ClusterPointIndices cluster_msg;
         cluster_msg.header = image_msg->header;
+        cluster_msg.cluster_indices.resize(image.channels());
         for (size_t c = 0; c < image.channels(); ++c) {
-          PCLIndicesMsg indices_msg;
+          PCLIndicesMsg &indices_msg = cluster_msg.cluster_indices[c];
           indices_msg.header = image_msg->header;
           for (size_t j = 0; j < image.rows; j++) {
             for (size_t i = 0; i < image.cols; i++) {
-              if (image.at<uchar>(j, i, c) > 0) {
+              if (image.at<int>(j, i, c) > 0) {
                 indices_msg.indices.push_back(j * image.cols + i);
               }
             }
           }
-          cluster_msg.cluster_indices.push_back(indices_msg);
         }
         pub_.publish(cluster_msg);
       } else {
@@ -108,13 +108,13 @@ namespace jsk_pcl_ros_utils
       }
     } else {
       cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(
-        image_msg, sensor_msgs::image_encodings::MONO8);
+        image_msg, sensor_msgs::image_encodings::TYPE_8UC1);
       cv::Mat image = cv_ptr->image;
       PCLIndicesMsg indices_msg;
       indices_msg.header = image_msg->header;
       for (size_t j = 0; j < image.rows; j++) {
         for (size_t i = 0; i < image.cols; i++) {
-          if (image.at<uchar>(j, i) == 255) {
+          if (image.at<uchar>(j, i) > 0) {
             indices_msg.indices.push_back(j * image.cols + i);
           }
         }
