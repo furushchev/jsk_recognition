@@ -28,10 +28,25 @@ Publishing Topic
 
   Class labels of each instance.
 
+* ``~output/label_cls`` (``sensor_msgs/Image``)
+
+  Label image color-coded by class.
+
+* ``~output/label_ins`` (``sensor_msgs/Image``)
+
+  Label image color-coded by instance.
+
 * ``~output/viz`` (``sensor_msgs/Image``)
 
   Visualized image of recognition result.
 
+* ``~output/class`` (``jsk_recognition_msgs/ClassificationResult``)
+
+  Class information of detected objects
+
+* ``~output/rects`` (``jsk_recognition_msgs/RectArray``)
+
+  Rectangles of detected objects
 
 Parameters
 ----------
@@ -53,6 +68,9 @@ Parameters
 
   Pretrained model path.
 
+* ``~classifier_name`` (String, default: ``rospy.get_name()``)
+
+  Name of this classifier
 
 Sample
 ------

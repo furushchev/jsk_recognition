@@ -421,6 +421,7 @@ namespace jsk_pcl_ros
     Eigen::Vector4f center;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr
       segmented_cloud_transformed (new pcl::PointCloud<pcl::PointXYZRGB>);
+    segmented_cloud_transformed->is_dense = segmented_cloud->is_dense;
     // align boxes if possible
     Eigen::Matrix4f m4 = Eigen::Matrix4f::Identity();
     Eigen::Quaternionf q = Eigen::Quaternionf::Identity();
@@ -566,19 +567,22 @@ namespace jsk_pcl_ros
     const sensor_msgs::PointCloud2ConstPtr &input,
     const jsk_recognition_msgs::ClusterPointIndicesConstPtr &indices_input)
   {
-    std::set<int> all_indices;
+    if (negative_indices_pub_.getNumSubscribers() <= 0) {
+      return;
+    }
+    std::vector<int> all_indices;
+
     boost::copy(
       boost::irange(0, (int)(input->width * input->height)),
       std::inserter(all_indices, all_indices.begin()));
+
     for (size_t i = 0; i < indices_input->cluster_indices.size(); i++) {
-      std::set<int> indices_set(indices_input->cluster_indices[i].indices.begin(),
-                                indices_input->cluster_indices[i].indices.end());
-      std::set<int> diff_indices;
-      std::set_difference(all_indices.begin(), all_indices.end(),
-                          indices_set.begin(), indices_set.end(),
-                          std::inserter(diff_indices, diff_indices.begin()));
-      all_indices = diff_indices;
+      for (size_t j = 0; j < indices_input->cluster_indices[i].indices.size(); ++j) {
+        all_indices[indices_input->cluster_indices[i].indices[j]] = -1;
+      }
     }
+    all_indices.erase(std::remove(all_indices.begin(), all_indices.end(), -1), all_indices.end());
+
     // publish all_indices
     pcl_msgs::PointIndices ros_indices;
     ros_indices.indices = std::vector<int>(all_indices.begin(), all_indices.end());
@@ -645,6 +649,7 @@ namespace jsk_pcl_ros
     for (size_t i = 0; i < argsort.size(); i++)
     {
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr segmented_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+      segmented_cloud->is_dense = cloud->is_dense;
       
       pcl_msgs::PointIndices out_indices_msg;
       out_indices_msg.header = input->header;
@@ -680,6 +685,12 @@ namespace jsk_pcl_ros
       geometry_msgs::Pose pose_msg;
       jsk_recognition_msgs::BoundingBox bounding_box;
       bounding_box.label = static_cast<int>(argsort[i]);
+
+      if (!segmented_cloud->is_dense) {
+        std::vector<int> nan_indices;
+        pcl::removeNaNFromPointCloud(*segmented_cloud, *segmented_cloud, nan_indices);
+      }
+
       bool successp = computeCenterAndBoundingBox(
         segmented_cloud, input->header, planes, coefficients, pose_msg, bounding_box);
       if (!successp) {

@@ -116,6 +116,9 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         self.pad_value = rospy.get_param('~pad_value', 128)
         self.thre1 = rospy.get_param('~thre1', 0.1)
         self.thre2 = rospy.get_param('~thre2', 0.05)
+        self.width = rospy.get_param('~width', None)
+        self.height = rospy.get_param('~height', None)
+        self.check_wh()
         self.gpu = rospy.get_param('~gpu', -1)  # -1 is cpu mode
         self.with_depth = rospy.get_param('~with_depth', False)
         # hand detection
@@ -124,6 +127,7 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         self.hand_gaussian_sigma = rospy.get_param('~hand/gaussian_sigma', 2.5)
         self.hand_thre1 = rospy.get_param('~hand/thre1', 20)
         self.hand_thre2 = rospy.get_param('~hand/thre2', 0.1)
+        self.hand_width_offset = rospy.get_param('~hand/width_offset', 0)
         # model loading
         self._load_model()
         # topic advertise
@@ -132,6 +136,12 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         self.sub_info = None
         if self.with_depth is True:
             self.pose_2d_pub = self.advertise('~pose_2d', PeoplePoseArray, queue_size=1)
+
+    def check_wh(self):
+        if (self.width is None) != (self.height is None):
+            rospy.logwarn('width and height should be specified, but '
+                          'specified only {}'
+                          .format('height' if self.height else 'width'))
 
     @property
     def visualize(self):
@@ -171,7 +181,8 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
                 with chainer.cuda.get_device_from_id(self.hand_net._device_id):
                     k = chainer.cuda.to_gpu(k)
                 self.hand_gaussian_kernel = k
-
+            chainer.global_config.train = False
+            chainer.global_config.enable_backprop = False
 
     def subscribe(self):
         if self.with_depth:
@@ -327,6 +338,10 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         xp = self.pose_net.xp
         device_id = self.pose_net._device_id
 
+        org_h, org_w, _ = bgr_img.shape
+        if not (self.width is None or self.height is None):
+            bgr_img = cv2.resize(bgr_img, (self.width, self.height))
+
         heatmap_avg = xp.zeros((bgr_img.shape[0], bgr_img.shape[1], 19),
                                dtype=np.float32)
         paf_avg = xp.zeros((bgr_img.shape[0], bgr_img.shape[1], 38),
@@ -339,8 +354,9 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
                 img, self.stride, self.pad_value)
             x = np.transpose(np.float32(
                 padded_img[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
-            with chainer.cuda.get_device_from_id(device_id):
-                x = chainer.cuda.to_gpu(x)
+            if self.gpu >= 0:
+                with chainer.cuda.get_device_from_id(device_id):
+                    x = chainer.cuda.to_gpu(x)
             x = chainer.Variable(x)
             pafs, heatmaps = self.pose_net(x)
             paf = pafs[-1]
@@ -428,8 +444,9 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
 
         vec = np.vstack(target_candidates_B)[
             :, :2] - np.vstack(target_candidates_A)[:, :2]
-        with chainer.cuda.get_device_from_id(device_id):
-            vec = chainer.cuda.to_gpu(vec)
+        if self.gpu >= 0:
+            with chainer.cuda.get_device_from_id(device_id):
+                vec = chainer.cuda.to_gpu(vec)
         norm = xp.sqrt(xp.sum(vec ** 2, axis=1)) + eps
         vec = vec / norm[:, None]
         start_end = zip(np.round(np.mgrid[np.vstack(target_candidates_A)[:, 1].reshape(-1, 1):np.vstack(target_candidates_B)[:, 1].reshape(-1, 1):(mid_num * 1j)]).astype(np.int32),
@@ -657,7 +674,7 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         # https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/29ea7e24dce4abae30faecf769855823ad7bb637/src/openpose/hand/handDetector.cpp
         for joint_positions in people_joint_positions:
             # crop hand image for each person
-            width = self._get_hand_roi_width(joint_positions)
+            width = self._get_hand_roi_width(joint_positions) + self.hand_width_offset
             hand_joint_positions = []
             if width > self.hand_thre1:
                 rwrist = find_joint('RWrist', joint_positions)
@@ -712,8 +729,9 @@ class PeoplePoseEstimation2D(ConnectionBasedTransport):
         x = x.transpose(0, 3, 1, 2)
         x = x / 256 - 0.5
 
-        with chainer.cuda.get_device_from_id(device_id):
-            x = chainer.cuda.to_gpu(x)
+        if self.gpu >= 0:
+            with chainer.cuda.get_device_from_id(device_id):
+                x = chainer.cuda.to_gpu(x)
         x = chainer.Variable(x)
 
         heatmaps = self.hand_net(x)
