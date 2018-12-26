@@ -186,7 +186,7 @@ namespace jsk_pcl_ros_utils
           }
         }
         else {
-          ROS_INFO("directed region width:%d height:%d", region_width_, region_height_);
+          NODELET_DEBUG("directed region width:%d height:%d", region_width_, region_height_);
           //set nan_point to all points first.
           for (size_t j = 0; j < mask.rows; j++) {
             for (size_t i = 0; i < mask.cols; i++) {
@@ -215,7 +215,7 @@ namespace jsk_pcl_ros_utils
           std::vector<int> near_indices(extract_num_);
           std::vector<float> near_distances(extract_num_);
           kdtree.nearestKSearch(zero, extract_num_, near_indices, near_distances);
-          ROS_INFO("directed num of extract points:%d   num of nearestKSearch points:%d", extract_num_, ((int) near_indices.size()));
+          NODELET_DEBUG("directed num of extract points:%d   num of nearestKSearch points:%d", extract_num_, ((int) near_indices.size()));
           int ext_num=std::min(extract_num_, ((int) near_indices.size()));
           for (int idx = 0; idx < ext_num; idx++) {
             int x = near_indices.at(idx) % width;
@@ -234,7 +234,7 @@ namespace jsk_pcl_ros_utils
             int min_y = region_y_off_;
             int max_x = region_width_ + region_x_off_ -1;
             int max_y = region_height_ + region_y_off_ -1;
-            NODELET_INFO("minx:%d miny:%d maxx:%d maxy:%d", min_x, min_y, max_x, max_y);
+            NODELET_DEBUG("minx:%d miny:%d maxx:%d maxy:%d", min_x, min_y, max_x, max_y);
             cv::Rect region = cv::Rect(min_x, min_y, std::max(max_x - min_x, 0), std::max(max_y - min_y, 0));
             cv::Mat clipped_mask_image = mask_image(region);
             cv_bridge::CvImage clipped_mask_bridge(point_cloud2_msg->header,
