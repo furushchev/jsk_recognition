@@ -470,6 +470,8 @@ public:
     if (err_sum > err_thr){
       ROS_INFO("          err_sum:%f > err_thr:%f return-from estimate-od", err_sum, err_thr);
       err_success = false;
+    } else {
+      o6p->reliability = 1.0 - (err_sum / err_thr);
     }
     // draw lines around the detected object
     for (int j = 0; j < corners2d_mat_trans.cols; j++){
@@ -547,7 +549,7 @@ class PointPoseExtractor
   ros::Subscriber _sub;
   ros::ServiceServer _server;
   ros::ServiceClient _client;
-  ros::Publisher _pub, _pub_agg, _pub_pose;
+  ros::Publisher _pub, _pub_pose;
   image_transport::Publisher _debug_pub;
   double _reprojection_threshold;
   double _distanceratio_threshold;
@@ -567,7 +569,6 @@ public:
     //                     &PointPoseExtractor::imagefeature_cb, this);
     _client = _n.serviceClient<posedetection_msgs::Feature0DDetect>("Feature0DDetect");
     _pub = _n.advertise<posedetection_msgs::ObjectDetection>("ObjectDetection", 10);
-    _pub_agg = _n.advertise<posedetection_msgs::ObjectDetection>("ObjectDetection_agg", 10);
     _pub_pose = _n.advertise<geometry_msgs::PoseStamped>("object_pose", 10);
     _debug_pub = it.advertise("debug_image", 1);
     _server = _n.advertiseService("SetTemplate", &PointPoseExtractor::settemplate_cb, this);
@@ -578,7 +579,6 @@ public:
     _sub.shutdown();
     _client.shutdown();
     _pub.shutdown();
-    _pub_agg.shutdown();
   }
 
   static void make_template_from_mousecb(Matching_Template *mt){
@@ -860,8 +860,10 @@ public:
                               (_viewer ? type : ""), _autosize);
       _templates.push_back(tmplt);
       if( _viewer )
+      {
         cv::namedWindow(type, _autosize ? CV_WINDOW_AUTOSIZE : 0);
-      cvSetMouseCallback (type.c_str(), &cvmousecb, static_cast<void *>(_templates.back()));
+        cvSetMouseCallback (type.c_str(), &cvmousecb, static_cast<void *>(_templates.back()));
+      }
     }
     return true;
   }
@@ -939,7 +941,6 @@ public:
         od.header.frame_id = msg->image.header.frame_id;
         od.objects = vo6p;
         _pub.publish(od);
-        _pub_agg.publish(od);
         // Publish result as geometry_msgs/PoseStamped. But it can only contain one object
         geometry_msgs::PoseStamped pose_msg;
         pose_msg.header = od.header;
