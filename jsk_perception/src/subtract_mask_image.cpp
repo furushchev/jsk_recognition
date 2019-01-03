@@ -39,10 +39,11 @@
 
 #include <jsk_perception/subtract_mask_image.h>
 #include <boost/assign.hpp>
-#include <jsk_topic_tools/log_utils.h>
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
+
+namespace enc = sensor_msgs::image_encodings;
 
 namespace jsk_perception
 {
@@ -50,6 +51,7 @@ namespace jsk_perception
   {
     DiagnosticNodelet::onInit();
     pnh_->param("approximate_sync", approximate_sync_, false);
+    pnh_->param("queue_size", queue_size_, 100);
     pub_ = advertise<sensor_msgs::Image>(
       *pnh_, "output", 1);
     onInitPostProcess();
@@ -60,17 +62,15 @@ namespace jsk_perception
     sub_src1_.subscribe(*pnh_, "input/src1", 1);
     sub_src2_.subscribe(*pnh_, "input/src2", 1);
     if (approximate_sync_) {
-      async_ = boost::make_shared<message_filters::Synchronizer<ApproxSyncPolicy> >(100);
+      async_ = boost::make_shared<message_filters::Synchronizer<ApproxSyncPolicy> >(queue_size_);
       async_->connectInput(sub_src1_, sub_src2_);
       async_->registerCallback(boost::bind(&SubtractMaskImage::subtract, this, _1, _2));
     }
     else {
-      sync_ = boost::make_shared<message_filters::Synchronizer<SyncPolicy> >(100);
+      sync_ = boost::make_shared<message_filters::Synchronizer<SyncPolicy> >(queue_size_);
       sync_->connectInput(sub_src1_, sub_src2_);
       sync_->registerCallback(boost::bind(&SubtractMaskImage::subtract, this, _1, _2));
     }
-    ros::V_string names = boost::assign::list_of("~input/src1")("~input/src2");
-    jsk_topic_tools::warnNoRemap(names);
   }
 
   void SubtractMaskImage::unsubscribe()
@@ -83,16 +83,26 @@ namespace jsk_perception
     const sensor_msgs::Image::ConstPtr& src1_msg,
     const sensor_msgs::Image::ConstPtr& src2_msg)
   {
-    cv::Mat src1 = cv_bridge::toCvShare(
-      src1_msg, src1_msg->encoding)->image;
-    cv::Mat src2 = cv_bridge::toCvShare(
-      src2_msg, src2_msg->encoding)->image;
-    cv::Mat result;
-    cv::subtract(src1, src2, result);
+    vital_checker_->poke();
+
+    if (src1_msg->width != src2_msg->width || src1_msg->height != src2_msg->height)
+    {
+      NODELET_ERROR("Size of masks are different!");
+      NODELET_ERROR("input/src1 = %dx%d", src1_msg->width, src1_msg->height);
+      NODELET_ERROR("input/src2 = %dx%d", src2_msg->width, src2_msg->height);
+      return;
+    }
+
+    cv::Mat mask1 = cv_bridge::toCvShare(src1_msg, enc::MONO8)->image;
+    cv::Mat mask2 = cv_bridge::toCvShare(src2_msg, enc::MONO8)->image;
+
+    cv::Mat mask2_not;
+    cv::bitwise_not(mask2, mask2_not);
+
+    cv::Mat result = cv::Mat::zeros(mask1.size(), mask1.type());
+    mask1.copyTo(result, mask2_not);
     pub_.publish(
-      cv_bridge::CvImage(src1_msg->header,
-                         sensor_msgs::image_encodings::MONO8,
-                         result).toImageMsg());
+      cv_bridge::CvImage(src1_msg->header, enc::MONO8, result).toImageMsg());
   }
 }
 
