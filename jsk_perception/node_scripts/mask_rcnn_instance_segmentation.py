@@ -56,14 +56,16 @@ class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
             "~classifier_name", rospy.get_name())
 
         n_fg_class = len(self.fg_class_names)
-        self.model = chainer_mask_rcnn.models.MaskRCNNResNet(
-            n_layers=50,
-            n_fg_class=n_fg_class,
-            pretrained_model=pretrained_model,
-            anchor_scales=rospy.get_param("~anchor_scales", None),
-            min_size=rospy.get_param("~min_size", None),
-            max_size=rospy.get_param("~max_size", None),
-        )
+        rospy.loginfo('Loading model for {} classes'.format(n_fg_class))
+        network_params = {
+            'n_layers': 50,
+            'n_fg_class': n_fg_class,
+            'pretrained_model': pretrained_model,
+        }
+        for key in ['anchor_scales', 'min_size', 'max_size']:
+            if rospy.has_param(key):
+                network_params[key] = rospy.get_param(key)
+        self.model = chainer_mask_rcnn.models.MaskRCNNResNet(**network_params)
 
         if self.gpu >= 0:
             self.model.to_gpu()
