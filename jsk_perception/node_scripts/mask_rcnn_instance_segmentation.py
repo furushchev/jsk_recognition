@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+import os
 import sys
+import yaml
 
 import chainer
 import numpy as np
@@ -34,9 +36,6 @@ from sensor_msgs.msg import Image
 class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
 
     def __init__(self):
-        rospy.logwarn('This node is experimental, and its interface '
-                      'can be changed in the future.')
-
         super(MaskRCNNInstanceSegmentation, self).__init__()
         # gpu
         self.gpu = rospy.get_param('~gpu', 0)
@@ -45,7 +44,13 @@ class MaskRCNNInstanceSegmentation(ConnectionBasedTransport):
         chainer.global_config.train = False
         chainer.global_config.enable_backprop = False
 
-        self.fg_class_names = rospy.get_param('~fg_class_names')
+        fg_class_names = rospy.get_param('~fg_class_names')
+        if isinstance(fg_class_names, str) and os.path.exists(fg_class_names):
+            rospy.loginfo('Loading class names from file: {}'.format(fg_class_names))
+            with open(fg_class_names, 'r') as f:
+                fg_class_names = yaml.load(f)
+        self.fg_class_names = fg_class_names
+
         pretrained_model = rospy.get_param('~pretrained_model')
         self.classifier_name = rospy.get_param(
             "~classifier_name", rospy.get_name())
