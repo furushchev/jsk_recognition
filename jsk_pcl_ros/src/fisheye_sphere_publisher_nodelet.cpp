@@ -78,8 +78,7 @@ namespace jsk_pcl_ros
 
     sensor_msgs::PointCloud2 pc2;
     pcl::toROSMsg(pointcloud, pc2);
-    pc2.header.frame_id = "fisheye";
-    pc2.header.stamp = ros::Time::now();
+    pc2.header = input->header;
     pub_sphere_.publish(pc2);
   }
 
