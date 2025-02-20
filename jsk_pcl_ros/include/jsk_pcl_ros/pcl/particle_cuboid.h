@@ -299,6 +299,9 @@ namespace pcl
         else if (z < 0 && abs_z >= abs_x && abs_z >= abs_y) {
           return 5;
         }
+
+        // Fallback: if none of the above conditions are met (for instance local_v is (0, 0, 0)), return 0.
+        return 0;
       }
       
       inline jsk_pcl_ros::Cube::Ptr toCube() const
